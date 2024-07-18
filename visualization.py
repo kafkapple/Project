@@ -105,6 +105,11 @@ def visualize_results(config, model, data_loader, device, history, stage):
             all_labels.extend(labels.numpy())
             all_embeddings.extend(outputs.cpu().numpy())
 
+    # Convert lists to numpy arrays
+    all_preds = np.array(all_preds)
+    all_labels = np.array(all_labels)
+    all_embeddings = np.array(all_embeddings)
+
     # Confusion Matrix
     cm = confusion_matrix(all_labels, all_preds)
     fig, ax = plt.subplots(figsize=(10, 8))
@@ -116,7 +121,13 @@ def visualize_results(config, model, data_loader, device, history, stage):
     plt.close(fig)
 
     # Embeddings visualization
-    tsne = TSNE(n_components=2, random_state=42)
+    max_samples = 1000 # to show
+    if len(all_embeddings) > max_samples:
+        indices = np.random.choice(len(all_embeddings), max_samples, replace=False)
+        all_embeddings = all_embeddings[indices]
+        all_labels = all_labels[indices]
+
+    tsne = TSNE(n_components=2, random_state=config.SEED)
     embeddings_2d = tsne.fit_transform(all_embeddings)
     fig, ax = plt.subplots(figsize=(10, 8))
     scatter = ax.scatter(embeddings_2d[:, 0], embeddings_2d[:, 1], c=all_labels, cmap='viridis')
@@ -124,8 +135,6 @@ def visualize_results(config, model, data_loader, device, history, stage):
     ax.set_title(f'{stage.capitalize()} Embeddings (t-SNE)')
     save_and_log_figure(stage, fig, config, "embeddings", f"{stage.capitalize()} Embeddings (t-SNE)")
     plt.close(fig)
-
-
 
 def extract_embeddings_and_predictions(model, data_loader, device):
     model.eval()
