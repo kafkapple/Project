@@ -6,7 +6,6 @@ from sklearn.metrics import confusion_matrix
 from sklearn.manifold import TSNE
 import wandb
 import torch
-from tqdm import tqdm
 from scipy.stats import spearmanr
 
 import matplotlib.pyplot as plt
@@ -15,56 +14,6 @@ import torch
 import numpy as np
 from sklearn.metrics import confusion_matrix
 import wandb
-
-# def visualize_results(config, model, data_loader, device, history, stage):
-#     """
-#     Visualize various results including confusion matrix, embeddings, and RSA.
-    
-#     Args:
-#     - config: Configuration object
-#     - model: Trained model
-#     - data_loader: DataLoader for the current stage (train/val/test)
-#     - device: Device to run the model on
-#     - history: Dictionary containing training history
-#     - stage: Current stage ('train', 'val', or 'test')
-#     """
-#     embeddings, true_labels, predictions = extract_embeddings_and_predictions(model, data_loader, device)
-    
-#     # Confusion Matrix
-#     cm_fig = plot_confusion_matrix(true_labels, predictions, config.LABELS_EMOTION)
-#     save_and_log_figure(stage, cm_fig, config, "confusion_matrix", "Confusion Matrix")
-
-#     # Embeddings Visualization
-#     emb_fig = visualize_embeddings(embeddings, true_labels, method='tsne')
-#     save_and_log_figure(stage, emb_fig, config, "embeddings", "Embeddings (t-SNE)")
-
-#     # RSA
-#     rsa_fig = perform_rsa(model, data_loader, device)
-#     save_and_log_figure(stage, rsa_fig, config, "rsa", "Representational Similarity Analysis")
-#     if history:
-#         epochs = range(1, len(history[stage]['loss']) + 1)
-#         plt.figure(figsize=(12, 4))
-#         plt.subplot(1, 2, 1)
-#         plt.plot(epochs, history[stage]['loss'], 'bo-', label=f'{stage.capitalize()} Loss')
-#         plt.title(f'{stage.capitalize()} Loss')
-#         plt.xlabel('Epochs')
-#         plt.ylabel('Loss')
-        
-#         plt.subplot(1, 2, 2)
-#         plt.plot(epochs, history[stage]['accuracy'], 'ro-', label=f'{stage.capitalize()} Accuracy')
-#         plt.title(f'{stage.capitalize()} Accuracy')
-#         plt.xlabel('Epochs')
-#         plt.ylabel('Accuracy')
-        
-#         plt.tight_layout()
-#         wandb.log({f"{stage}": {"learning_curves": wandb.Image(plt)}})
-#         plt.close()
-#     # # Learning Curves (only for train/val)
-#     # if stage in ['train', 'val']:
-#     #     lc_fig = plot_learning_curves(history)
-#     #     save_and_log_figure(lc_fig, config, "learning_curves", "Learning Curves")
-
-#     plt.close('all')  # Close all figure windows
 
 def save_and_log_figure(stage, fig, config, name, title):
     """Save figure to file and log to wandb"""
@@ -86,7 +35,7 @@ def visualize_results(config, model, data_loader, device, history, stage):
         ax2.set_xlabel('Epochs')
         ax2.set_ylabel('Accuracy')
         
-        plt.tight_layout()
+        #plt.tight_layout()
         save_and_log_figure(stage, fig, config, "learning_curves", f"{stage.capitalize()} Learning Curves")
         plt.close(fig)
 
@@ -111,12 +60,7 @@ def visualize_results(config, model, data_loader, device, history, stage):
     all_embeddings = np.array(all_embeddings)
 
     # Confusion Matrix
-    cm = confusion_matrix(all_labels, all_preds)
-    fig, ax = plt.subplots(figsize=(10, 8))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax)
-    ax.set_title(f'{stage.capitalize()} Confusion Matrix')
-    ax.set_xlabel('Predicted')
-    ax.set_ylabel('True')
+    fig = plot_confusion_matrix(all_labels, all_preds, config.LABELS_EMOTION)
     save_and_log_figure(stage, fig, config, "confusion_matrix", f"{stage.capitalize()} Confusion Matrix")
     plt.close(fig)
 
@@ -156,16 +100,21 @@ def extract_embeddings_and_predictions(model, data_loader, device):
     return np.array(all_embeddings), np.array(all_labels), np.array(all_predictions)
 
 def visualize_embeddings(embeddings, labels, method='tsne'):
-    from sklearn.manifold import TSNE
-    
-    reducer = TSNE(n_components=2, random_state=42)
+    if method == 'pca':
+        reducer = PCA(n_components=2)
+    elif method == 'tsne':
+        reducer = TSNE(n_components=2, random_state=42)
+    else:
+        raise ValueError("Invalid method. Use 'pca' or 'tsne'.")
+
     reduced_embeddings = reducer.fit_transform(embeddings)
 
     fig, ax = plt.subplots(figsize=(10, 8))
-    scatter = ax.scatter(reduced_embeddings[:, 0], reduced_embeddings[:, 1], c=labels, cmap='viridis')
+    sns.scatterplot(x=reduced_embeddings[:, 0], y=reduced_embeddings[:, 1], hue=labels, palette="deep", legend="full", ax=ax)
     ax.set_title(f"{method.upper()} of Emotion Recognition Embeddings")
-    plt.colorbar(scatter)
+    
     return fig
+
 def plot_learning_curves(config):
     # Assuming we've saved loss and accuracy values during training
     train_losses = np.load(f"{config.MODEL_DIR}/train_losses.npy")
@@ -191,22 +140,26 @@ def plot_learning_curves(config):
     ax2.set_ylabel('Accuracy')
     ax2.legend()
     
-    plt.tight_layout()
+    #plt.tight_layout()
     plt.savefig(f"{config.MODEL_DIR}/learning_curves.png")
     wandb.log({"learning_curves": wandb.Image(plt)})
-
-def plot_confusion_matrix(labels, preds, label_dict, normalize=True):
+    
+def plot_confusion_matrix(labels, preds, labels_emotion, normalize=True):
     cm = confusion_matrix(labels, preds)
     if normalize:
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        fmt = '.2f'
+    else:
+        fmt = 'd'
     
     fig, ax = plt.subplots(figsize=(10, 8))
-    sns.heatmap(cm, annot=True, fmt='.2f' if normalize else 'd', 
-                cmap='Blues', xticklabels=label_dict.values(), 
-                yticklabels=label_dict.values(), ax=ax)
+    sns.heatmap(cm, annot=True, fmt=fmt, cmap='Blues', xticklabels=labels_emotion.values(), yticklabels=labels_emotion.values(), ax=ax)
     ax.set_xlabel('Predicted')
     ax.set_ylabel('True')
     ax.set_title('Confusion Matrix')
+    
+    # wandb.log({"confusion_matrix": wandb.Image(fig)})
+    #plt.close(fig)
     return fig
 
 def perform_rsa(model, data_loader, device):
@@ -263,5 +216,5 @@ def plot_learning_curves(history):
     ax2.set_ylabel('Accuracy')
     ax2.legend()
     
-    plt.tight_layout()
+    #plt.tight_layout()
     return fig

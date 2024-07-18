@@ -1,113 +1,34 @@
 import os
 from glob import glob
-import random
-import numpy as np
 import argparse
 import re
-
 import torch
-import wandb
 from config import Config
 from data_utils import load_data, prepare_dataloaders
-from models import get_model, SVMClassifier, EmotionRecognitionModel_v1, EmotionRecognitionModel_v2
-from train_utils import train_model, evaluate_model
+from models import prep_model, get_model, SVMClassifier, EmotionRecognitionModel_v1, EmotionRecognitionModel_v2
+from train_utils import train_model, evaluate_model, load_checkpoint
 from evaluation import compare_models
 from visualization import visualize_results
 from hyperparameter_search import run_hyperparameter_sweep
 
-
-def set_seed(seed):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-        #print(torch.cuda.current_device()) 
-        print(f'\n#####GPU verified. {torch.cuda.get_device_name(0)}')
-    return device
-
-def prep_model(config, train_loader, is_sweep=False):
-    device = set_seed(config.SEED)
-    print(f"Using device: {device}")
-    config.device = device
-    print(f'\n###### Preparing Model...\nCurrent path: {config.CKPT_SAVE_PATH}\n\nModel:{config.MODEL}\nOptimizer:{config.OPTIMIZER}\nActivation: {config.ACTIVATION}\nBatch size: {config.BATCH_SIZE}\nlearning rate: {config.lr}\nDrop out: {config.DROPOUT_RATE}\nNum of epoch: {config.NUM_EPOCHS}\n')
-    
-    # # Data settings
-    # RATIO_TRAIN: float = 0.7
-    # RATIO_TEST: float = 0.15
-    # DATA_NAME= "RAVDESS_audio_speech"
-    # # Paths
-    # PROJECT_DIR: str = "Project"#"NMA_Project_SER"
-    #### Optimizer & Cost function 
-    model = get_model(config, train_loader)
-    if config.OPTIMIZER == "adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=float(config.lr))
-    elif config.OPTIMIZER == "SGD":
-        optimizer = torch.optim.SGD(model.parameters(), lr=float(config.lr), momentum=0.9)
-    else:
-        print('err optimizer')
-        raise ValueError(f"Unknown optimizer: {config.OPTIMIZER}")
-    
-    criterion = torch.nn.CrossEntropyLoss()
-    #### Model loading or start new
-    if os.path.exists(config.CKPT_SAVE_PATH):
-        if not is_sweep: # load model
-            #id_wandb = wandb.util.generate_id()
-            
-            model, optimizer, initial_epoch, best_val_accuracy, id_wandb = load_checkpoint(config.CKPT_SAVE_PATH, model, optimizer, device)
-            print(f"Resuming training from epoch {initial_epoch}. Best val accuracy: {best_val_accuracy:.3f}\nWandb id loaded: {id_wandb}\nWandb project: {config.WANDB_PROJECT}")
-            config.id_wandb=id_wandb
-            wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, settings=wandb.Settings(start_method="thread"))
-        else: 
-            print('\n####### Sweep starts. ')
-            initial_epoch = 1
-            id_wandb = wandb.util.generate_id()
-            wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, resume=False, settings=wandb.Settings(start_method="thread"))
-            model = get_model(config, train_loader)
-    else:
-        print('No trained data.')
-        initial_epoch = 1
-        id_wandb = wandb.util.generate_id()
-        print(f'Wandb id generated: {id_wandb}')
-        wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS)
-        model = get_model(config, train_loader)
-
-    config.initial_epoch = initial_epoch
-    config.id_wandb = id_wandb
-    model = model.to(device)
-    return model, optimizer, criterion, device
-
-def load_checkpoint(ckpt_path, model, optimizer, device):
-    checkpoint = torch.load(ckpt_path, map_location=device)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    if optimizer is not None:
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    start_epoch = checkpoint['epoch'] + 1
-    best_val_accuracy = checkpoint['best_val_accuracy']
-    id_wandb = checkpoint['id_wandb']
-    return model, optimizer, start_epoch, best_val_accuracy, id_wandb
-
 def read_best_model_info(config):
-    info_path = os.path.join(config.MODEL_DIR, 'best_model_info.txt')
+    info_path = os.path.join(config.MODEL_BASE_DIR, 'best_model_info.txt')
     if os.path.exists(info_path):
         with open(info_path, 'r') as f:
             return f.read().strip()
     return None
   
 def write_best_model_info(config, info):
-    info_path = os.path.join(config.MODEL_DIR, 'best_model_info.txt')
+    info_path = os.path.join(config.MODEL_BASE_DIR, 'best_model_info.txt')
     with open(info_path, 'w') as f:
         f.write(info)
 
 def find_best_model(config, test_loader, device, exclude_models=None):
-    model_folders = [f for f in os.listdir(config.MODEL_DIR) if os.path.isdir(os.path.join(config.MODEL_DIR, f))]
+    model_folders = [f for f in os.listdir(config.MODEL_BASE_DIR) if os.path.isdir(os.path.join(config.MODEL_BASE_DIR, f))]
     best_models = []
     
     for folder in model_folders:
-        folder_path = os.path.join(config.MODEL_DIR, folder)
+        folder_path = os.path.join(config.MODEL_BASE_DIR, folder)
         best_model_files = glob(os.path.join(folder_path, '*best_model*.pth'))
         best_models.extend(best_model_files)
     
@@ -115,10 +36,10 @@ def find_best_model(config, test_loader, device, exclude_models=None):
         best_models = [m for m in best_models if m not in exclude_models]
     
     if not best_models:
-        print(f"No new best model files found in {config.MODEL_DIR}")
+        print(f"No new best model files found in {config.MODEL_BASE_DIR}")
         return None
     
-    print(f"Found {len(best_models)} best model files:")
+    print(f"Found {len(best_models)} putative best model files:")
     for model_path in best_models:
         print(model_path)
     
@@ -170,7 +91,7 @@ def get_next_version(model_path):
     return os.path.join(dir_name, new_file_name)
 
 def list_models(config):
-    models = glob(os.path.join(config.MODEL_DIR, '**', '*best_model*.pth'), recursive=True)
+    models = glob(os.path.join(config.MODEL_BASE_DIR, '**', '*best_model*.pth'), recursive=True)
     if not models:
         print("No trained models found.")
         return None
@@ -192,6 +113,29 @@ def print_menu():
 def main(args=None):
     config = Config()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Best model i
+    best_model_info_path = os.path.join(config.MODEL_BASE_DIR, 'best_model_info.txt')
+    if os.path.exists(best_model_info_path):
+        print(f'\n##### Trained models are found #####\n')
+        with open(best_model_info_path, 'r') as f:
+            best_model_info = f.read().strip()
+        
+        best_model_path = None
+        for line in best_model_info.split('\n'):
+            if line.startswith("Best model path:"):
+                best_model_path = line.split(": ", 1)[1].strip()
+                break
+        
+        if best_model_path:
+            config.MODEL_SAVE_PATH = best_model_path
+            config.CKPT_SAVE_PATH = best_model_path.replace("best_model", "checkpoint")
+            print(f"Current best model: {config.MODEL_SAVE_PATH}")
+        else:
+            print("Best model information found, but path is not available.")
+    else:
+        print("No best model information found.")
+    
+    ### Dataset
     
     data, labels = load_data(config)
     train_loader, val_loader, test_loader = prepare_dataloaders(data, labels, config)
@@ -231,7 +175,7 @@ def main(args=None):
                 print("Something's wrong. Try again.")
                 continue
             break
-
+    config.CUR_MODE=args.mode
     if args.mode == 'train':
         config.NUM_EPOCHS = int(input("Number of epoch for training: "))
         print(f"Total {config.NUM_EPOCHS} epochs of training.\n")
@@ -243,17 +187,21 @@ def main(args=None):
         visualize_results(config, model, test_loader, device, history, 'test')
         
         print(f"Best val accuracy: {best_val_accuracy:.4f}")
-    
     elif args.mode == 'resume':
         models = list_models(config)
         if models:
-            print(models)
             model_index = int(input("Select the model to retrain: ")) - 1
             config.MODEL_SAVE_PATH = models[model_index]
             config.CKPT_SAVE_PATH = config.MODEL_SAVE_PATH.replace('best_model', 'checkpoint')
             additional_epochs = int(input("Number of epoch for training: "))
-            config.NUM_EPOCHS += additional_epochs
+            print(f'Model will be trained for {additional_epochs} epochs')
+            
             model, optimizer, criterion, device = prep_model(config, train_loader, is_sweep=False)
+            _, _, start_epoch, _, _ = load_checkpoint(config.CKPT_SAVE_PATH, model, optimizer, device)
+            
+            config.initial_epoch = start_epoch
+            config.NUM_EPOCHS = additional_epochs
+            
             history, best_val_accuracy = train_model(model, train_loader, val_loader, config, device, optimizer, criterion)
             visualize_results(config, model, train_loader, device, history, 'train')
             visualize_results(config, model, val_loader, device, history, 'val')
