@@ -8,7 +8,6 @@ from transformers import Wav2Vec2Processor, Wav2Vec2Model
 from torch.utils.data import Dataset, DataLoader, random_split
 from sklearn.utils import resample
 from collections import Counter
-from config import config
 
 processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base")
 wav2vec2_model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base")

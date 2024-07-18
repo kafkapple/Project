@@ -1,7 +1,81 @@
+import os
 import torch
 import torch.nn as nn
 from sklearn.svm import SVC
 import joblib
+import wandb
+from train_utils import load_checkpoint
+import numpy as np
+import random
+
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        #print(torch.cuda.current_device()) 
+        print(f'\n#####GPU verified. {torch.cuda.get_device_name(0)}')
+    return device
+def prep_model(config, train_loader, is_sweep=False):
+    device = set_seed(config.SEED)
+    print(f"Using device: {device}")
+    config.device = device
+    print(f'\n###### Preparing Model...\nCurrent path: {config.CKPT_SAVE_PATH}\n\nModel:{config.MODEL}\nOptimizer:{config.OPTIMIZER}\nActivation: {config.ACTIVATION}\nBatch size: {config.BATCH_SIZE}\nlearning rate: {config.lr}\nDrop out: {config.DROPOUT_RATE}\n')
+    
+    # # Data settings
+    # RATIO_TRAIN: float = 0.7
+    # RATIO_TEST: float = 0.15
+    # DATA_NAME= "RAVDESS_audio_speech"
+    # # Paths
+    # PROJECT_DIR: str = "Project"#"NMA_Project_SER"
+    #### Optimizer & Cost function 
+    model = get_model(config, train_loader)
+    if config.OPTIMIZER == "adam":
+        optimizer = torch.optim.Adam(model.parameters(), lr=float(config.lr))
+    elif config.OPTIMIZER == "SGD":
+        optimizer = torch.optim.SGD(model.parameters(), lr=float(config.lr), momentum=0.9)
+    else:
+        print('err optimizer')
+        raise ValueError(f"Unknown optimizer: {config.OPTIMIZER}")
+    
+    criterion = torch.nn.CrossEntropyLoss()
+    #### Model loading or start new
+    if os.path.exists(config.CKPT_SAVE_PATH):
+        if not is_sweep: # load model
+            #id_wandb = wandb.util.generate_id()
+            
+            model, optimizer, initial_epoch, best_val_accuracy, id_wandb = load_checkpoint(config.CKPT_SAVE_PATH, model, optimizer, device)
+            print(f"Resuming training from epoch {initial_epoch}. Best val accuracy: {best_val_accuracy:.3f}\nWandb id loaded: {id_wandb}\nWandb project: {config.WANDB_PROJECT}")
+            if config.CUR_MODE == 'benchmark':
+                id_wandb = wandb.util.generate_id()
+                config.WANDB_PROJECT+= "_"+config.CUR_MODE
+                print(f'But this is for benchmark. New wandb id is generated: {id_wandb}\nWandb project: {config.WANDB_PROJECT}')
+              
+            config.id_wandb=id_wandb
+            wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, settings=wandb.Settings(start_method="thread"))
+        else: 
+            print('\n####### Sweep starts. ')
+            initial_epoch = 1
+            id_wandb = wandb.util.generate_id()
+            config.WANDB_PROJECT+="_"+config.CUR_MODE
+            wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, resume=False, settings=wandb.Settings(start_method="thread"))
+            model = get_model(config, train_loader)
+    else:
+        print('No trained data.')
+        initial_epoch = 1
+        id_wandb = wandb.util.generate_id()
+        print(f'Wandb id generated: {id_wandb}')
+        wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS)
+        model = get_model(config, train_loader)
+
+    config.initial_epoch = initial_epoch
+    config.id_wandb = id_wandb
+    model = model.to(device)
+    return model, optimizer, criterion, device
 
 def get_model(config, train_loader):
     if config.MODEL == 'wav2vec_v1':

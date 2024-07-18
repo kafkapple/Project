@@ -41,11 +41,13 @@ def compare_models(deep_model, train_loader, val_loader, test_loader, config, de
             y_true.extend(labels.cpu().numpy())
             y_pred.extend(predicted.cpu().numpy())
     
+    average='weighted' #'macro'
     deep_accuracy = accuracy_score(y_true, y_pred)
-    deep_precision = precision_score(y_true, y_pred, average='weighted')
-    deep_recall = recall_score(y_true, y_pred, average='weighted')
-    deep_f1 = f1_score(y_true, y_pred, average='weighted')
+    deep_precision = precision_score(y_true, y_pred, average=average)
+    deep_recall = recall_score(y_true, y_pred, average=average)
+    deep_f1 = f1_score(y_true, y_pred, average=average)
 
+    print('\nCalculating baseline model...')
     X_train, y_train = extract_features_and_labels(train_loader)
     #X_val, y_val = extract_features_and_labels(val_loader)
     X_test, y_test = extract_features_and_labels(test_loader)
@@ -58,11 +60,11 @@ def compare_models(deep_model, train_loader, val_loader, test_loader, config, de
     
     svm_model = SVC(kernel='rbf')
     svm_accuracy, svm_precision, svm_recall, svm_f1 = train_and_evaluate_baseline(
-        svm_model, X_train_scaled, y_train, X_test_scaled, y_test
+        svm_model, X_train_scaled, y_train, X_test_scaled, y_test, config
     )
     lr_model = LogisticRegression(multi_class='ovr', max_iter=1000)
     lr_accuracy, lr_precision, lr_recall, lr_f1 = train_and_evaluate_baseline(
-        lr_model, X_train_scaled, y_train, X_test_scaled, y_test
+        lr_model, X_train_scaled, y_train, X_test_scaled, y_test, config
     )
 
     print("Deep Learning Model:")

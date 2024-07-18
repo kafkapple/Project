@@ -5,10 +5,11 @@ import datetime
 
 @dataclass
 class Config:
+    CUR_MODE: str ='' # current mode
     # General settings
     SEED: int = 2024
-    NUM_EPOCHS: int = 2
-    N_SWEEP: int = 30
+    NUM_EPOCHS: int = 5
+    N_SWEEP: int = 50
     BATCH_SIZE: int = 32
     lr: float = 0.0005
     DROPOUT_RATE: float = 0.4
@@ -22,6 +23,10 @@ class Config:
     RATIO_TRAIN: float = 0.7
     RATIO_TEST: float = 0.15
     DATA_NAME= "RAVDESS_audio_speech"
+    LABELS_EMOTION: dict = field(default_factory=lambda: {
+        0: 'neutral', 1: 'calm', 2: 'happy', 3: 'sad',
+        4: 'angry', 5: 'fearful', 6: 'disgust', 7: 'surprised'
+    })
     # Paths
     PROJECT_DIR: str = "Project"#"NMA_Project_SER"
     BASE_DIR: str = field(init=False)
@@ -95,9 +100,6 @@ class Config:
         os.makedirs(self.MODEL_DIR, exist_ok=True)
         
 
-    LABELS_EMOTION: dict = field(default_factory=lambda: {
-        0: 'neutral', 1: 'calm', 2: 'happy', 3: 'sad',
-        4: 'angry', 5: 'fearful', 6: 'disgust', 7: 'surprised'
-    })
+    
 
 config = Config()
