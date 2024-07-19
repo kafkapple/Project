@@ -22,8 +22,8 @@ from nltk.stem import WordNetLemmatizer
 # preprocess the data (common across all models)
 from sentence_transformers import SentenceTransformer
 
-# word2vec
-#from gensim.models import Word2Vec
+# # word2vec
+# #from gensim.models import Word2Vec
 # # url = "https://raw.githubusercontent.com/ataislucky/Data-Science/main/dataset/emotion_train.txt"
 
 class TextDataset(Dataset):
@@ -239,28 +239,28 @@ def preprocess_text(text):
 #     data_1_3['Cleaned_Text'] = data_1_3['Text'].apply(preprocess_text).dropna()
 #     data_1_3["hf_embed"] = data_1_3['Cleaned_Text'].apply(lambda x: st_encoder.encode(x))
 
-#     # Obtain word embeddings for data_1.Text and train a svm model on it with class being data_1.Emotion and measure accuracy
+    # Obtain word embeddings for data_1.Text and train a svm model on it with class being data_1.Emotion and measure accuracy
     # Apply preprocessing to the text data
     data_1_3['Cleaned_Text'] = data_1_3['Text'].apply(preprocess_text).dropna()
 
-    # Get word embeddings for the cleaned text
-    X = data_1_3['Cleaned_Text'].apply(lambda sent: w2v_model.wv.get_mean_vector([word for word in sent.split()]))
-    X = np.stack(X.values)
+#     # Get word embeddings for the cleaned text
+#     X = data_1_3['Cleaned_Text'].apply(lambda sent: w2v_model.wv.get_mean_vector([word for word in sent.split()]))
+#     X = np.stack(X.values)
 
-    # Continue with mapping emotions to numerical labels, and splitting the data
-    y = data_1_3['Emotions'].map(config.LABELS_EMOTION_TEXT).values
-    #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    # Get word embeddings for data.Text
-    data = data_1_3.copy()
-    X = data['hf_embed']
-    X = np.stack(X.values)
-    # Map emotions to numerical labels
-    y = data['Emotions'].map(config.LABELS_EMOTION_TEXT).values
-    print(f'Data size: {X.shape, y.shape}\nPreparing Text dataloader...')
-    # Split data into train and test sets
+#     # Continue with mapping emotions to numerical labels, and splitting the data
+#     y = data_1_3['Emotions'].map(config.LABELS_EMOTION_TEXT).values
+#     #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+#     # Get word embeddings for data.Text
+#     data = data_1_3.copy()
+#     X = data['hf_embed']
+#     X = np.stack(X.values)
+#     # Map emotions to numerical labels
+#     y = data['Emotions'].map(config.LABELS_EMOTION_TEXT).values
+#     print(f'Data size: {X.shape, y.shape}\nPreparing Text dataloader...')
+#     # Split data into train and test sets
     
-    # X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.3, random_state=42)
-    # X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, test_size=0.5, random_state=42)
+#     # X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.3, random_state=42)
+#     # X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, test_size=0.5, random_state=42)
     
-    train_loader, val_loader, test_loader=prepare_dataloaders(X, y, config)
-    return train_loader, val_loader, test_loader#_train, X_val, X_test, y_train, y_val, y_test
+#     train_loader, val_loader, test_loader=prepare_dataloaders(X, y, config)
+#     return train_loader, val_loader, test_loader#_train, X_val, X_test, y_train, y_val, y_test
