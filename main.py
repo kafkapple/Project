@@ -3,6 +3,7 @@ from glob import glob
 import argparse
 import re
 import torch
+import torch.nn as nn
 from config import Config
 from data_utils import load_data, prepare_dataloaders
 from models import prep_model, get_model, SVMClassifier, EmotionRecognitionModel_v1, EmotionRecognitionModel_v2
@@ -11,6 +12,14 @@ from evaluation import compare_models
 from visualization import visualize_results
 from hyperparameter_search import run_hyperparameter_sweep
 import wandb
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        nn.init.xavier_uniform_(m.weight)
+        nn.init.constant_(m.bias, 0.01)
+    elif isinstance(m, nn.BatchNorm1d):
+        nn.init.constant_(m.weight, 1)
+        nn.init.constant_(m.bias, 0)
+
 
 def read_best_model_info(config):
     info_path = os.path.join(config.MODEL_BASE_DIR, 'best_model_info.txt')
@@ -190,7 +199,12 @@ def main(args=None):
         config.NUM_EPOCHS = int(input("Number of epoch for training: "))
         print(f"Total {config.NUM_EPOCHS} epochs of training.\n")
         model, optimizer, criterion, device = prep_model(config, train_loader, is_sweep=False)
+        print('Model initialization...')
+        model.apply(init_weights)
+        
+        
         history, best_val_accuracy = train_model(model, train_loader, val_loader, config, device, optimizer, criterion)
+        
         
         visualize_results(config, model, train_loader, device, history, 'train')
         visualize_results(config, model, val_loader, device, history, 'val')
