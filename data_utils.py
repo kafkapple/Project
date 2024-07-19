@@ -23,7 +23,7 @@ from nltk.stem import WordNetLemmatizer
 from sentence_transformers import SentenceTransformer
 
 # word2vec
-from gensim.models import Word2Vec
+#from gensim.models import Word2Vec
 # # url = "https://raw.githubusercontent.com/ataislucky/Data-Science/main/dataset/emotion_train.txt"
 
 class TextDataset(Dataset):
@@ -208,38 +208,38 @@ def preprocess_text(text):
     cleaned_text = ' '.join(tokens)
     return cleaned_text
 
-def data_prep_text(config):
-    st_encoder = SentenceTransformer('all-MiniLM-L12-v2')
-      # Download necessary NLTK data
-    nltk.download('stopwords')
-    nltk.download('wordnet')
-    # # Load spaCy model
-    # nlp = spacy.load('en_core_web_sm')
+# def data_prep_text(config):
+#     st_encoder = SentenceTransformer('all-MiniLM-L12-v2')
+#       # Download necessary NLTK data
+#     nltk.download('stopwords')
+#     nltk.download('wordnet')
+#     # # Load spaCy model
+#     # nlp = spacy.load('en_core_web_sm')
 
-    # Initialize stop words and lemmatizer
-    stop_words = set(stopwords.words('english'))
-    lemmatizer = WordNetLemmatizer()
+#     # Initialize stop words and lemmatizer
+#     stop_words = set(stopwords.words('english'))
+#     lemmatizer = WordNetLemmatizer()
     
-    data_1 = pd.read_csv(os.path.join(config.DATA_DIR,"val.txt"), sep=";")
-    data_1.columns = ["Text", "Emotions"]
-    data_3 = pd.read_csv(os.path.join(config.DATA_DIR,"validation.csv")).rename(columns={"text":"Text", "label":"Emotions"})
-    data_3["Emotions"] = data_3["Emotions"].map({0:"sadness", 1:"joy", 2:"love", 3:"anger", 4:"fear", 5:"surprise"})
+#     data_1 = pd.read_csv(os.path.join(config.DATA_DIR,"val.txt"), sep=";")
+#     data_1.columns = ["Text", "Emotions"]
+#     data_3 = pd.read_csv(os.path.join(config.DATA_DIR,"validation.csv")).rename(columns={"text":"Text", "label":"Emotions"})
+#     data_3["Emotions"] = data_3["Emotions"].map({0:"sadness", 1:"joy", 2:"love", 3:"anger", 4:"fear", 5:"surprise"})
 
-    # Train Word2Vec model
-    data_1_3 = pd.concat([data_1, data_3])
-    sentences = [sentence.split() for sentence in data_1_3['Text']]
+#     # Train Word2Vec model
+#     data_1_3 = pd.concat([data_1, data_3])
+#     sentences = [sentence.split() for sentence in data_1_3['Text']]
 
-    VECTOR_SIZE = 100
-    MIN_COUNT = 5
-    WINDOW = 3
-    SG = 1
-    w2v_model = Word2Vec(sentences, vector_size=VECTOR_SIZE, min_count=MIN_COUNT, window=WINDOW, sg=SG)
+#     VECTOR_SIZE = 100
+#     MIN_COUNT = 5
+#     WINDOW = 3
+#     SG = 1
+#     w2v_model = Word2Vec(sentences, vector_size=VECTOR_SIZE, min_count=MIN_COUNT, window=WINDOW, sg=SG)
 
-    # encode the data
-    data_1_3['Cleaned_Text'] = data_1_3['Text'].apply(preprocess_text).dropna()
-    data_1_3["hf_embed"] = data_1_3['Cleaned_Text'].apply(lambda x: st_encoder.encode(x))
+#     # encode the data
+#     data_1_3['Cleaned_Text'] = data_1_3['Text'].apply(preprocess_text).dropna()
+#     data_1_3["hf_embed"] = data_1_3['Cleaned_Text'].apply(lambda x: st_encoder.encode(x))
 
-    # Obtain word embeddings for data_1.Text and train a svm model on it with class being data_1.Emotion and measure accuracy
+#     # Obtain word embeddings for data_1.Text and train a svm model on it with class being data_1.Emotion and measure accuracy
     # Apply preprocessing to the text data
     data_1_3['Cleaned_Text'] = data_1_3['Text'].apply(preprocess_text).dropna()
 
