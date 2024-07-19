@@ -158,7 +158,7 @@ def main(args=None):
             choice = print_menu()
             if choice == '1':
                 if os.path.exists(config.MODEL_SAVE_PATH) or os.path.exists(config.CKPT_SAVE_PATH):
-                    user_input = input("Existing trained data exists. Trained with a new version? (y/n): ").lower()
+                    user_input = input("Existing trained data exists. Training with a new version? (y/n): ").lower()
                     if user_input == 'y':
                         config.MODEL_SAVE_PATH = get_next_version(config.MODEL_SAVE_PATH)
                         config.CKPT_SAVE_PATH = get_next_version(config.CKPT_SAVE_PATH)
