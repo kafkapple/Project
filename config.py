@@ -11,8 +11,10 @@ class Config:
     NUM_EPOCHS: int = 5
     N_SWEEP: int = 50
     BATCH_SIZE: int = 32
-    lr: float = 0.0005
+    
     DROPOUT_RATE: float = 0.4
+    lr: float = 0.0005
+    weight_decay: float =1e-5
     
     # Model settings
     MODEL: str = "wav2vec_v2"
@@ -41,18 +43,18 @@ class Config:
     id_wandb: str = ""
     
     
-    CONFIG_SWEEP = {
-        "method": "bayes",
-        "metric": {"goal": "minimize", "name": "val.loss"},
-        "parameters": {
-            "BATCH_SIZE": {"values": [16, 32, 64]},
-            "MODEL":{"values":['SVM_C','wav2vec_v2']},
-            "lr": {"values": [0.0001, 0.0005, 0.001, 0.005, 0.01]},
-           # "DROPOUT_RATE": {"values": [0.3, 0.4, 0.5]},
-            #"activation":{"values":['relu', 'leaky_relu', 'gelu']},
-            "OPTIMIZER":{"values":['adam', 'SGD']}
-        },
+    sweep_config = {
+        'method': 'bayes',
+        'metric': {'goal': 'maximize', 'name': 'val.loss' },
+        'parameters': {
+            'learning_rate': {'min': 0.0001, 'max': 0.01},
+            'batch_size': {'values': [16, 32, 64, 128]},
+           # 'num_epochs': {'min': 5, 'max': 50},
+            'dropout_rate': {'min': 0.1, 'max': 0.6},
+            "activation":{"values":['relu', 'leaky_relu', 'gelu']}
+        }
     }
+    
     CONFIG_DEFAULTS = {
     "resume":"allow",
     "architecture": f"{MODEL}",
@@ -60,12 +62,12 @@ class Config:
     #"batch_size": BATCH_SIZE,
     "epochs": NUM_EPOCHS,
     # "initial_epoch": initial_epoch,
-    "BATCH_SIZE": BATCH_SIZE,
-    "MODEL": MODEL,
+    "batch_size": BATCH_SIZE,
+    "model": MODEL,
     "lr": lr,
-    "DROPOUT_RATE": DROPOUT_RATE,
-    "ACTIVATION": ACTIVATION,
-    "OPTIMIZER": OPTIMIZER
+    "dropout_rate": DROPOUT_RATE,
+    "activation": ACTIVATION,
+    "optimizer": OPTIMIZER
     }  
     def __post_init__(self):
         current_date = datetime.datetime.now()

@@ -35,7 +35,7 @@ def prep_model(config, train_loader, is_sweep=False):
     #### Optimizer & Cost function 
     model = get_model(config, train_loader)
     if config.OPTIMIZER == "adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=float(config.lr))
+        optimizer = torch.optim.Adam(model.parameters(), weight_decay=config.weight_decay, lr=float(config.lr))
     elif config.OPTIMIZER == "SGD":
         optimizer = torch.optim.SGD(model.parameters(), lr=float(config.lr), momentum=0.9)
     else:
@@ -114,6 +114,8 @@ class EmotionRecognitionBase(nn.Module):
         super().__init__()
         self.dropout = nn.Dropout(dropout_rate)
         self.activation = self._get_activation(activation)
+        self.input_size=input_size
+        self.num_classes=num_classes
         
     def _get_activation(self, activation):
         if activation == 'gelu':

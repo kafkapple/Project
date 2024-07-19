@@ -10,6 +10,7 @@ from train_utils import train_model, evaluate_model, load_checkpoint
 from evaluation import compare_models
 from visualization import visualize_results
 from hyperparameter_search import run_hyperparameter_sweep
+import wandb
 
 def read_best_model_info(config):
     info_path = os.path.join(config.MODEL_BASE_DIR, 'best_model_info.txt')
@@ -45,15 +46,17 @@ def find_best_model(config, test_loader, device, exclude_models=None):
     
     best_performance = float('inf')  # Using loss as the metric, lower is better
     best_model_path = None
-    
+    dict_models={}
     for model_path in best_models:
+        
         try:
             model = get_model(config, test_loader)
             model.load_state_dict(torch.load(model_path, map_location=device))
             model.to(device)
             model.eval()
             
-            loss, _, _, _, _, _, _ = evaluate_model(model, test_loader, torch.nn.CrossEntropyLoss(), device)
+            loss, accuracy, _, _, f1, _, _ = evaluate_model(model, test_loader, torch.nn.CrossEntropyLoss(), device)
+            dict_models[model_path]={'loss':loss, 'accuracy':accuracy,'f1':f1}
             
             print(f"Model: {model_path}")
             print(f"Test Loss: {loss:.4f}")
@@ -69,6 +72,7 @@ def find_best_model(config, test_loader, device, exclude_models=None):
     if best_model_path:
         print(f"\nBest performing model: {best_model_path}")
         print(f"Best performance (Loss): {best_performance:.4f}")
+        print(f"Other metrics\n{dict_models[best_model_path]}")
         
         # Save best model info
         info = f"Best model path: {best_model_path}\nBest performance (Loss): {best_performance:.4f}"
@@ -151,6 +155,7 @@ def main(args=None):
                         config.CKPT_SAVE_PATH = get_next_version(config.CKPT_SAVE_PATH)
                         print(f"New model will be saved as {config.MODEL_SAVE_PATH}.")
                         args = argparse.Namespace(mode='train')
+                        config.id_wandb = wandb.util.generate_id()
                     elif user_input == 'n':
                         args = argparse.Namespace(mode='resume')
                     else:
@@ -158,16 +163,21 @@ def main(args=None):
                         continue
                 else:
                     args = argparse.Namespace(mode='train')
+                    config.id_wandb = wandb.util.generate_id()
             elif choice == '2':
                 args = argparse.Namespace(mode='resume')
             elif choice == '3':
                 args = argparse.Namespace(mode='sweep', sweeps=config.N_SWEEP)
+                #config.id_wandb = wandb.util.generate_id()
             elif choice == '4':
                 args = argparse.Namespace(mode='evaluate')
+                config.id_wandb = wandb.util.generate_id()
             elif choice == '5':
                 args = argparse.Namespace(mode='benchmark')
+                config.id_wandb = wandb.util.generate_id()
             elif choice == '6':
                 args = argparse.Namespace(mode='find_best')
+                config.id_wandb = wandb.util.generate_id()
             elif choice == '7':
                 print("Exit program.")
                 return

@@ -3,6 +3,7 @@ from tqdm import tqdm
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import wandb
 
+
 def load_checkpoint(ckpt_path, model, optimizer, device):
     checkpoint = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -90,6 +91,10 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
     precision = precision_score(all_labels, all_preds, average=metric_average)
     recall = recall_score(all_labels, all_preds, average=metric_average)
     f1 = f1_score(all_labels, all_preds, average=metric_average)
+    
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            print(f"{name}: grad_norm: {param.grad.norm().item()}")
     
     return epoch_loss, accuracy, precision, recall, f1
 
