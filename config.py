@@ -2,10 +2,12 @@ from dataclasses import dataclass, field
 import os
 import sys
 import datetime
+from collections import namedtuple
 
 @dataclass
 class Config:
     CUR_MODE: str ='' # current mode
+    N_STEP_FIG: int = 2
     # General settings
     SEED: int = 2024
     NUM_EPOCHS: int = 5
@@ -21,6 +23,13 @@ class Config:
     ACTIVATION: str = "relu"
     OPTIMIZER: str = "adam"
     
+    max_iter: int = 10000 # for multi logistic reg
+    
+    history: dict = field(default_factory=lambda: {
+        'train': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []},
+        'val': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []}
+    })
+    N_EMBEDDINGS: int = 500 # n of embeddings to show
     # Data settings
     RATIO_TRAIN: float = 0.7
     RATIO_TEST: float = 0.15
@@ -39,6 +48,10 @@ class Config:
     MODEL_DIR: str = field(init=False)
     MODEL_SAVE_PATH: str = field(init=False)
     CKPT_SAVE_PATH: str = field(init=False)
+    
+    # Metric
+    EvaluationResult = namedtuple('EvaluationResult', ['loss', 'accuracy', 'precision', 'recall', 'f1', 'labels', 'predictions'])
+    METRIC_AVG='weighted'
     
     # Wandb settings
     WANDB_PROJECT: str = field(init=False)
