@@ -7,13 +7,8 @@ from sklearn.manifold import TSNE
 import wandb
 import torch
 from scipy.stats import spearmanr
-
-import matplotlib.pyplot as plt
-import seaborn as sns
-import torch
-import numpy as np
-from sklearn.metrics import confusion_matrix
-import wandb
+import pandas as pd
+from tqdm import tqdm
 
 def save_and_log_figure(stage, fig, config, name, title):
     """Save figure to file and log to wandb"""
@@ -21,6 +16,7 @@ def save_and_log_figure(stage, fig, config, name, title):
     wandb.log({f"{stage}":{f"{name}": wandb.Image(fig, caption=title)}})
     
 def visualize_results(config, model, data_loader, device, history, stage):
+    print('\nVisualization of results starts.\n')
     if stage in ['train', 'val'] and history:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
         epochs = range(1, len(history[stage]['loss']) + 1)
@@ -46,7 +42,7 @@ def visualize_results(config, model, data_loader, device, history, stage):
     all_embeddings = []
 
     with torch.no_grad():
-        for inputs, labels in data_loader:
+        for inputs, labels in tqdm(data_loader, desc="Preparing data for Visualizing..."):
             inputs = inputs.to(device)
             outputs = model(inputs)
             _, preds = torch.max(outputs, 1)
@@ -65,14 +61,19 @@ def visualize_results(config, model, data_loader, device, history, stage):
     plt.close(fig)
 
     # Embeddings visualization
-    max_samples = 1000 # to show
+    max_samples = config.N_EMBEDDINGS # to show
+    
     if len(all_embeddings) > max_samples:
         indices = np.random.choice(len(all_embeddings), max_samples, replace=False)
         all_embeddings = all_embeddings[indices]
         all_labels = all_labels[indices]
         
     embeddings, labels, pred = extract_embeddings_and_predictions(model, data_loader, device)
-    fig = visualize_embeddings(config, embeddings, config.LABELS_EMOTION)
+    
+    print(f"Number of embeddings: {len(embeddings)}")
+    print(f"Number of labels: {len(labels)}")
+    
+    fig = visualize_embeddings(config, embeddings, labels)
     
     save_and_log_figure(stage, fig, config, "embeddings", f"{stage.capitalize()} Embeddings (t-SNE)")
     plt.close(fig)
@@ -97,9 +98,9 @@ def extract_embeddings_and_predictions(model, data_loader, device):
     return np.array(all_embeddings), np.array(all_labels), np.array(all_predictions)
 
 
-import pandas as pd
 
 def visualize_embeddings(config, embeddings, labels, method='tsne'):
+    print('\nVisualization of embedding starts...\n')
     if method == 'pca':
         reducer = PCA(n_components=2)
     elif method == 'tsne':
@@ -108,12 +109,14 @@ def visualize_embeddings(config, embeddings, labels, method='tsne'):
         raise ValueError("Invalid method. Use 'pca' or 'tsne'.")
 
     reduced_embeddings = reducer.fit_transform(embeddings)
-    
-    # DataFrame 생성
+
+    string_labels = [config.LABELS_EMOTION.get(int(label), f"Unknown_{label}") for label in labels]
+
+    #string_labels = [config.LABELS_EMOTION.get(str(int(label)), f"Unknown_{label}") for label in labels]
     df = pd.DataFrame({
         'x': reduced_embeddings[:, 0],
         'y': reduced_embeddings[:, 1],
-        'label': [config.LABELS_EMOTION[l] for l in labels]
+        'label': string_labels
     })
 
     fig, ax = plt.subplots(figsize=(10, 8))
@@ -121,6 +124,7 @@ def visualize_embeddings(config, embeddings, labels, method='tsne'):
     ax.set_title(f"{method.upper()} of Emotion Recognition Embeddings")
     
     return fig
+
 
 def plot_learning_curves(config):
     # Assuming we've saved loss and accuracy values during training

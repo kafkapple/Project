@@ -3,6 +3,8 @@ from tqdm import tqdm
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import wandb
 import os
+from collections import namedtuple
+from visualization import visualize_results
 
 def load_checkpoint(config, model, optimizer, device):
     ckpt_path=config.CKPT_SAVE_PATH
@@ -42,10 +44,10 @@ def train_model(model, train_loader, val_loader, config, device, optimizer, crit
     
     for epoch in range(start_epoch, start_epoch + config.NUM_EPOCHS):
         # Train
-        train_metrics = train_epoch(model, train_loader, criterion, optimizer, device)
+        train_metrics = train_epoch(config, model, train_loader, criterion, optimizer, device)
         
         # Validate
-        val_metrics = evaluate_model(model, val_loader, criterion, device)
+        val_metrics = evaluate_model(config, model, val_loader, criterion, device)
         
         # Update history
         for i, metric in enumerate(['loss', 'accuracy', 'precision', 'recall', 'f1']):
@@ -59,6 +61,9 @@ def train_model(model, train_loader, val_loader, config, device, optimizer, crit
         # Log metrics
         log_metrics('train', train_metrics, epoch)
         log_metrics('val', val_metrics[:5], epoch)  # val_metrics might have 7 values, we only need first 5
+        
+        if epoch % config.N_STEP_FIG ==0:
+            visualize_results(config, model, val_loader, device, history, 'val')
         
         scheduler.step(val_metrics[0]) #[0] val loss
         
@@ -85,7 +90,7 @@ def train_model(model, train_loader, val_loader, config, device, optimizer, crit
         
 
     return history, best_val_accuracy
-def train_epoch(model, dataloader, criterion, optimizer, device):
+def train_epoch(config, model, dataloader, criterion, optimizer, device):
     model.train()
     running_loss = 0.0
     all_preds = []
@@ -107,7 +112,7 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
         all_labels.extend(batch_labels.cpu().numpy())
         
         progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
-    metric_average='weighted'
+    metric_average=config.METRIC_AVG
     epoch_loss = running_loss / len(dataloader)
     accuracy = accuracy_score(all_labels, all_preds)
     precision = precision_score(all_labels, all_preds, average=metric_average)
@@ -121,11 +126,13 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
     
     return epoch_loss, accuracy, precision, recall, f1
 
-def evaluate_model(model, dataloader, criterion, device):
+def evaluate_model(config, model, dataloader, criterion, device):
     model.eval()
     running_loss = 0.0
     all_preds = []
     all_labels = []
+    
+    EvaluationResult = config.EvaluationResult
     
     with torch.no_grad():
         for features, batch_labels in tqdm(dataloader, desc="Evaluating"):
@@ -139,10 +146,13 @@ def evaluate_model(model, dataloader, criterion, device):
     
     epoch_loss = running_loss / len(dataloader)
     accuracy = accuracy_score(all_labels, all_preds)
-    precision = precision_score(all_labels, all_preds, average='weighted', zero_division=0)
-    recall = recall_score(all_labels, all_preds, average='weighted')
-    f1 = f1_score(all_labels, all_preds, average='weighted')
-    return epoch_loss, accuracy, precision, recall, f1, all_labels, all_preds
+    precision = precision_score(all_labels, all_preds, average=config.METRIC_AVG, zero_division=0)
+    recall = recall_score(all_labels, all_preds, average=config.METRIC_AVG)
+    f1 = f1_score(all_labels, all_preds, average=config.METRIC_AVG)
+    
+    return EvaluationResult(epoch_loss, accuracy, precision, recall, f1, all_labels, all_preds)
+
+#epoch_loss, accuracy, precision, recall, f1, all_labels, all_preds
 
 def log_metrics(stage, stage_metrics, epoch):
     metrics = ['loss', 'accuracy', 'precision', 'recall', 'f1']

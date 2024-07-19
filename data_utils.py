@@ -26,6 +26,40 @@ from sentence_transformers import SentenceTransformer
 # from gensim.models import Word2Vec
 # # url = "https://raw.githubusercontent.com/ataislucky/Data-Science/main/dataset/emotion_train.txt"
 
+def convert_to_int_keys(dictionary):
+    """
+    :param dictionary: 
+    :return: 
+    """
+ 
+    if all(isinstance(k, int) for k in dictionary.keys()):
+        print("Keys are already integers. Returning original dictionary.")
+        return dictionary
+    
+
+    if all(isinstance(k, str) for k in dictionary.keys()) and all(isinstance(v, int) for v in dictionary.values()):
+        print("Swapping keys and values.")
+        return {v: k for k, v in dictionary.items()}
+    
+
+    if not any(isinstance(k, int) or isinstance(v, int) for k, v in dictionary.items()):
+        print("No integer type found in keys or values. Returning original dictionary.")
+        return dictionary
+    
+
+    new_dict = {}
+    for k, v in dictionary.items():
+        if isinstance(k, int):
+            new_dict[k] = v
+        elif isinstance(v, int):
+            new_dict[v] = k
+        else:
+            new_dict[k] = v  # 정수가 아닌 경우 그대로 유지
+    
+    print("Converted dictionary to have integer keys where possible.")
+    return new_dict
+
+
 class TextDataset(Dataset):
     def __init__(self, data, labels):
         self.data = data
@@ -264,3 +298,28 @@ def preprocess_text(text):
     
 #     train_loader, val_loader, test_loader=prepare_dataloaders(X, y, config)
 #     return train_loader, val_loader, test_loader#_train, X_val, X_test, y_train, y_val, y_test
+
+def main():
+    config = Config()
+    labels=config.LABELS_EMOTION
+    labels_text=config.LABELS_EMOTION_TEXT
+    labels_text = convert_to_int_keys(labels_text)
+    
+    print(labels, labels_text)
+    
+    
+if __name__ == "__main__":
+    
+    main()
+
+    # str_dict = {'1': 'one', '2': 'two', '3': 'three'}
+    # print("Original string key dictionary:", str_dict)
+    # swapped_str_dict = swap_keys_values(str_dict, 'str')
+    # print("Swapped string key dictionary:", swapped_str_dict)
+
+    # print()
+
+    # int_dict = {1: 'one', 2: 'two', 3: 'three'}
+    # print("Original integer key dictionary:", int_dict)
+    # swapped_int_dict = swap_keys_values(int_dict, 'int')
+    # print("Swapped integer key dictionary:", swapped_int_dict)

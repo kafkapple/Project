@@ -2,7 +2,7 @@ import wandb
 from models import prep_model, get_model
 from train_utils import train_model
 from data_utils import prepare_dataloaders
-
+from visualization import visualize_results
 def run_hyperparameter_sweep(config, data, labels):
 
     config.WANDB_PROJECT= "NMA_Project_SER_sweep_test_v0"#"NMA_Project_SER_sweep_together_v1_e5"
@@ -15,7 +15,6 @@ def run_hyperparameter_sweep(config, data, labels):
     else:
         sweep_id = config.sweep_id
         print(f'Previous Sweep Sweep id is loaded : {sweep_id}')
-    print(type(config))
 
     def train():
         wandb.init()
@@ -31,6 +30,7 @@ def run_hyperparameter_sweep(config, data, labels):
         #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         train_model(model, train_loader, val_loader, config, device, optimizer, criterion)
+        visualize_results(config, model, val_loader, device, config.history, 'test')
 
     wandb.agent(sweep_id, train, count=config.N_SWEEP)
     wandb.finish()

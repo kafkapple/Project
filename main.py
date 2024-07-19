@@ -64,7 +64,8 @@ def find_best_model(config, test_loader, device, exclude_models=None):
             model.to(device)
             model.eval()
             
-            loss, accuracy, _, _, f1, _, _ = evaluate_model(model, test_loader, torch.nn.CrossEntropyLoss(), device)
+            loss, accuracy, _, _, f1, _, _ = evaluate_model(config, model, test_loader, torch.nn.CrossEntropyLoss(), device)
+            
             dict_models[model_path]={'loss':loss, 'accuracy':accuracy,'f1':f1}
             
             print(f"Model: {model_path}")
@@ -204,10 +205,8 @@ def main(args=None):
         
         
         history, best_val_accuracy = train_model(model, train_loader, val_loader, config, device, optimizer, criterion)
+        config.history=history
         
-        
-        visualize_results(config, model, train_loader, device, history, 'train')
-        visualize_results(config, model, val_loader, device, history, 'val')
         visualize_results(config, model, test_loader, device, history, 'test')
         
         print(f"Best val accuracy: {best_val_accuracy:.4f}")
@@ -227,8 +226,7 @@ def main(args=None):
             config.NUM_EPOCHS = additional_epochs
             
             history, best_val_accuracy = train_model(model, train_loader, val_loader, config, device, optimizer, criterion)
-            visualize_results(config, model, train_loader, device, history, 'train')
-            visualize_results(config, model, val_loader, device, history, 'val')
+            config.history=history
             visualize_results(config, model, test_loader, device, history, 'test')
             print(f"Best val accuracy: {best_val_accuracy:.4f}")
         else:
@@ -243,8 +241,10 @@ def main(args=None):
     
     elif args.mode == 'evaluate':
         model, _, criterion, device = prep_model(config, train_loader, is_sweep=False)
-        test_loss, test_metrics = evaluate_model(model, test_loader, criterion, device)
-        print(f"Test Loss: {test_loss:.4f}, Test Accuracy: {test_metrics['accuracy']:.4f}")
+        #test_loss, test_metrics 
+        test_loss, test_accuracy, _, _, test_f1, _, _ = evaluate_model(config, model, test_loader, criterion, device)
+        
+        print(f"Test Loss: {test_loss:.4f}, Accuracy: {test_accuracy:.4f}, F1: {test_f1:.4f}")
         visualize_results(config, model, test_loader, device, None, 'test')
     
     elif args.mode == 'benchmark':
