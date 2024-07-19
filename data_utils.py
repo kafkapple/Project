@@ -23,7 +23,7 @@ from nltk.stem import WordNetLemmatizer
 from sentence_transformers import SentenceTransformer
 
 # # word2vec
-# from gensim.models import Word2Vec
+# #from gensim.models import Word2Vec
 # # url = "https://raw.githubusercontent.com/ataislucky/Data-Science/main/dataset/emotion_train.txt"
 
 def convert_to_int_keys(dictionary):
@@ -273,9 +273,9 @@ def preprocess_text(text):
 #     data_1_3['Cleaned_Text'] = data_1_3['Text'].apply(preprocess_text).dropna()
 #     data_1_3["hf_embed"] = data_1_3['Cleaned_Text'].apply(lambda x: st_encoder.encode(x))
 
-#     # Obtain word embeddings for data_1.Text and train a svm model on it with class being data_1.Emotion and measure accuracy
-#     # Apply preprocessing to the text data
-#     data_1_3['Cleaned_Text'] = data_1_3['Text'].apply(preprocess_text).dropna()
+    # Obtain word embeddings for data_1.Text and train a svm model on it with class being data_1.Emotion and measure accuracy
+    # Apply preprocessing to the text data
+    data_1_3['Cleaned_Text'] = data_1_3['Text'].apply(preprocess_text).dropna()
 
 #     # Get word embeddings for the cleaned text
 #     X = data_1_3['Cleaned_Text'].apply(lambda sent: w2v_model.wv.get_mean_vector([word for word in sent.split()]))

@@ -12,6 +12,7 @@ from evaluation import compare_models
 from visualization import visualize_results
 from hyperparameter_search import run_hyperparameter_sweep
 import wandb
+
 def init_weights(m):
     if isinstance(m, nn.Linear):
         nn.init.xavier_uniform_(m.weight)
@@ -19,7 +20,6 @@ def init_weights(m):
     elif isinstance(m, nn.BatchNorm1d):
         nn.init.constant_(m.weight, 1)
         nn.init.constant_(m.bias, 0)
-
 
 def read_best_model_info(config):
     info_path = os.path.join(config.MODEL_BASE_DIR, 'best_model_info.txt')
