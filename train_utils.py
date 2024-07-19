@@ -2,18 +2,32 @@ import torch
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import wandb
+import os
 
+def load_checkpoint(config, model, optimizer, device):
+    ckpt_path=config.CKPT_SAVE_PATH
+    if os.path.exists(ckpt_path):
+        checkpoint = torch.load(ckpt_path, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        if optimizer is not None:
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
+        if 'scheduler_state_dict' in checkpoint and scheduler is not None:
+            scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1  #
 
-def load_checkpoint(ckpt_path, model, optimizer, device):
-    checkpoint = torch.load(ckpt_path, map_location=device)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    if optimizer is not None:
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    start_epoch = checkpoint['epoch'] + 1  #
-
-    best_val_accuracy = checkpoint['best_val_accuracy']
-    id_wandb = checkpoint['id_wandb']
-    return model, optimizer, start_epoch, best_val_accuracy, id_wandb
+        best_val_accuracy = checkpoint['best_val_accuracy']
+        try:
+            config.id_wandb = checkpoint['id_wandb']
+            config.sweep_id = checkpoint['sweep_id']
+        except:
+            print('There is a Checkpoint, but No wandb id or sweep data is found.')
+        return model, optimizer, start_epoch, best_val_accuracy
+    else:
+        print("No checkpoint found.")
+        return model, optimizer, 0, 0, wandb.util.generate_id()
+    
 
 def train_model(model, train_loader, val_loader, config, device, optimizer, criterion):
     best_val_accuracy = 0
@@ -21,9 +35,11 @@ def train_model(model, train_loader, val_loader, config, device, optimizer, crit
         'train': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []},
         'val': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []}
     }
+     # 
+    start_epoch = config.initial_epoch  
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5, verbose=True)
 
-    start_epoch = config.initial_epoch  # config에서 initial_epoch를 가져옵니다
-
+    
     for epoch in range(start_epoch, start_epoch + config.NUM_EPOCHS):
         # Train
         train_metrics = train_epoch(model, train_loader, criterion, optimizer, device)
@@ -44,6 +60,8 @@ def train_model(model, train_loader, val_loader, config, device, optimizer, crit
         log_metrics('train', train_metrics, epoch)
         log_metrics('val', val_metrics[:5], epoch)  # val_metrics might have 7 values, we only need first 5
         
+        scheduler.step(val_metrics[0]) #[0] val loss
+        
         if val_metrics[1] > best_val_accuracy:  # val_metrics[1] is accuracy
             best_val_accuracy = val_metrics[1]
             torch.save(model.state_dict(), config.MODEL_SAVE_PATH)
@@ -54,9 +72,13 @@ def train_model(model, train_loader, val_loader, config, device, optimizer, crit
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(), 
             'best_val_accuracy': best_val_accuracy,
             'id_wandb': wandb.run.id
         }
+        if config.IS_SWEEP:
+            print(f'Sweep is finished. ID is saved: {config.sweep_id}')
+            ckpt['sweep_id']=config.sweep_id
         torch.save(ckpt, config.CKPT_SAVE_PATH)
 
         print(f"Checkpoint saved to {config.CKPT_SAVE_PATH} at epoch {epoch+1}\n{ckpt['id_wandb']}\n")
@@ -92,9 +114,10 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
     recall = recall_score(all_labels, all_preds, average=metric_average)
     f1 = f1_score(all_labels, all_preds, average=metric_average)
     
-    for name, param in model.named_parameters():
-        if param.grad is not None:
-            print(f"{name}: grad_norm: {param.grad.norm().item()}")
+    #### for debugging - gradient chk
+    # for name, param in model.named_parameters():
+    #     if param.grad is not None:
+    #         print(f"{name}: grad_norm: {param.grad.norm().item()}")
     
     return epoch_loss, accuracy, precision, recall, f1
 

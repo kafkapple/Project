@@ -46,14 +46,13 @@ def prep_model(config, train_loader, is_sweep=False):
     criterion = torch.nn.CrossEntropyLoss()
     #### Model loading or start new
     if os.path.exists(config.CKPT_SAVE_PATH):
+        model, optimizer, initial_epoch, best_val_accuracy= load_checkpoint(config, model, optimizer, device)
         if not is_sweep: # load model
-            #id_wandb = wandb.util.generate_id()
-            
-            model, optimizer, initial_epoch, best_val_accuracy, id_wandb = load_checkpoint(config.CKPT_SAVE_PATH, model, optimizer, device)
-            print(f"Resuming training from epoch {initial_epoch}. Best val accuracy: {best_val_accuracy:.3f}\nWandb id loaded: {id_wandb}\nWandb project: {config.WANDB_PROJECT}")
+            id_wandb = wandb.util.generate_id()
+            print(f"Resuming training from epoch {initial_epoch}. Best val accuracy: {best_val_accuracy:.3f}\nWandb id loaded: {config.id_wandb}\nWandb project: {config.WANDB_PROJECT}")
             if config.CUR_MODE == 'benchmark':
-                id_wandb = wandb.util.generate_id()
-                config.WANDB_PROJECT+= "_"+config.CUR_MODE
+                
+                #config.WANDB_PROJECT+= "_"+config.CUR_MODE
                 print(f'But this is for benchmark. New wandb id is generated: {id_wandb}\nWandb project: {config.WANDB_PROJECT}')
               
             config.id_wandb=id_wandb
@@ -61,8 +60,9 @@ def prep_model(config, train_loader, is_sweep=False):
         else: 
             print('\n####### Sweep starts. ')
             initial_epoch = 1
-            id_wandb = wandb.util.generate_id()
-            config.WANDB_PROJECT+="_"+config.CUR_MODE
+            #id_wandb = wandb.util.generate_id()
+            #config.WANDB_PROJECT+="_"+config.CUR_MODE
+            id_wandb=config.id_wandb
             wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, resume=False, settings=wandb.Settings(start_method="thread"))
             model = get_model(config, train_loader)
     else:
@@ -97,6 +97,8 @@ def get_model(config, train_loader):
 class SVMClassifier:
     def __init__(self, input_size, num_classes):
         self.model = SVC(kernel='rbf')
+        self.input_size=input_size
+        self.num_classes=num_classes
 
     def fit(self, X, y):
         self.model.fit(X, y)
