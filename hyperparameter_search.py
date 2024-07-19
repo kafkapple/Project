@@ -4,20 +4,18 @@ from train_utils import train_model
 from data_utils import prepare_dataloaders
 
 def run_hyperparameter_sweep(config, data, labels):
-    sweep_config = {
-        'method': 'bayes',
-        'metric': {'goal': 'maximize', 'name': 'val.loss' },
-        'parameters': {
-            'learning_rate': {'min': 0.0001, 'max': 0.01},
-            'batch_size': {'values': [16, 32, 64, 128]},
-           # 'num_epochs': {'min': 5, 'max': 50},
-            'dropout_rate': {'min': 0.1, 'max': 0.6},
-            "activation":{"values":['relu', 'leaky_relu', 'gelu']}
-        }
-    }
-    
 
-    sweep_id = wandb.sweep(sweep_config, project=config.WANDB_PROJECT+"_sweep")
+    config.WANDB_PROJECT= "NMA_Project_SER_sweep_test_v0"#"NMA_Project_SER_sweep_together_v1_e5"
+    #print(config)
+    if config.SWEEP_NAIVE:
+        sweep_id = wandb.sweep(config.sweep_config, project=config.WANDB_PROJECT)
+        sweep_id = f"{config.ENTITY}/{config.WANDB_PROJECT}/{sweep_id}"#wandb.sweep
+        config.sweep_id = sweep_id
+        print(f'\nFirst Sweep starts. Sweep id: {sweep_id}\n')
+    else:
+        sweep_id = config.sweep_id
+        print(f'Previous Sweep Sweep id is loaded : {sweep_id}')
+    print(type(config))
 
     def train():
         wandb.init()
@@ -35,3 +33,4 @@ def run_hyperparameter_sweep(config, data, labels):
         train_model(model, train_loader, val_loader, config, device, optimizer, criterion)
 
     wandb.agent(sweep_id, train, count=config.N_SWEEP)
+    wandb.finish()

@@ -114,7 +114,7 @@ def list_models(config):
     return models
 
 def print_menu():
-    print("\nEmotion Recognition Model - Choose an option:")
+    print("\n<<< NMA 2024 Emotion Recognition Model >>> - Choose an option:")
     print("1. Train a new model")
     print("2. Resume training")
     print("3. Run hyperparameter search")
@@ -221,7 +221,7 @@ def main(args=None):
             print(f'Model will be trained for {additional_epochs} epochs')
             
             model, optimizer, criterion, device = prep_model(config, train_loader, is_sweep=False)
-            _, _, start_epoch, _, _ = load_checkpoint(config.CKPT_SAVE_PATH, model, optimizer, device)
+            _, _, start_epoch, _ = load_checkpoint(config, model, optimizer, device)
             
             config.initial_epoch = start_epoch
             config.NUM_EPOCHS = additional_epochs
@@ -235,6 +235,10 @@ def main(args=None):
             print("No models to resume.")
 
     elif args.mode == 'sweep':
+        config.IS_SWEEP=True
+        num_epoch_sweep = input("Number of epoch / sweep for Hyperparameter Search: (e.g., 10 5 # 10 epoch / 5 sweep)")
+        config.NUM_EPOCHS, config.N_SWEEP = [int(i) for i in num_epoch_sweep.split(' ')]
+        print(f'{config.NUM_EPOCHS}-epoch / {config.N_SWEEP}-sweep\n')
         run_hyperparameter_sweep(config, data, labels)
     
     elif args.mode == 'evaluate':

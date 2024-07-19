@@ -96,22 +96,31 @@ def extract_embeddings_and_predictions(model, data_loader, device):
     
     return np.array(all_embeddings), np.array(all_labels), np.array(all_predictions)
 
+
+import pandas as pd
+
 def visualize_embeddings(config, embeddings, labels, method='tsne'):
     if method == 'pca':
         reducer = PCA(n_components=2)
     elif method == 'tsne':
-        reducer = TSNE(n_components=2, random_state=config.SEED)
+        reducer = TSNE(n_components=2, random_state=42)
     else:
         raise ValueError("Invalid method. Use 'pca' or 'tsne'.")
 
     reduced_embeddings = reducer.fit_transform(embeddings)
+    
+    # DataFrame 생성
+    df = pd.DataFrame({
+        'x': reduced_embeddings[:, 0],
+        'y': reduced_embeddings[:, 1],
+        'label': [config.LABELS_EMOTION[l] for l in labels]
+    })
 
     fig, ax = plt.subplots(figsize=(10, 8))
-    sns.scatterplot(x=reduced_embeddings[:, 0], y=reduced_embeddings[:, 1], hue=labels, palette="deep", legend="full", ax=ax)
-    ax.set_title(f"wav2vec Embeddings fine-tuned for Emotion recognition({method})")
+    sns.scatterplot(data=df, x='x', y='y', hue='label', palette="deep", legend="full", ax=ax)
+    ax.set_title(f"{method.upper()} of Emotion Recognition Embeddings")
     
     return fig
-
 
 def plot_learning_curves(config):
     # Assuming we've saved loss and accuracy values during training
