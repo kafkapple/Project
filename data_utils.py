@@ -16,6 +16,7 @@ import pandas as pd
 import nltk
 import spacy
 import string
+import tarfile
 
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
@@ -98,10 +99,21 @@ wav2vec2_model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base")
 #wav2vec2_model.gradient_checkpointing_enable()
 
 
-def download_ravdess(config):
-    url = "https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1"
-    dataset_path = os.path.join(config.DATA_DIR, "RAVDESS_speech.zip")
 
+
+def download_dataset(config):
+    
+    url = config.dataset[config.select_dataset]#"https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1"
+    if config.select_dataset == 'RAVDESS_speech':
+        dataset_ext = 'zip'
+        extracted_path = os.path.join(config.DATA_DIR, config.select_dataset)
+                                      
+    elif config.select_dataset == 'MELD':
+        dataset_ext = 'tar.gz'
+        extracted_path = os.path.join(config.DATA_DIR, f"{config.select_dataset}.Raw")
+    dataset_path= extracted_path + '.'+dataset_ext
+
+    print(f'Dataset: {config.select_dataset}')
     if not os.path.exists(dataset_path):
         print("Downloading dataset...")
         response = requests.get(url, stream=True)
@@ -115,18 +127,66 @@ def download_ravdess(config):
     else:
         print("Dataset already exists. Skipping download.\n")
 
-    extracted_path = os.path.join(config.DATA_DIR, "RAVDESS_speech")
     if not os.path.exists(extracted_path):
-        try:
-            with zipfile.ZipFile(dataset_path, 'r') as zip_ref:
-                zip_ref.extractall(extracted_path)
-            print("Extracted dataset.")
-        except Exception as e:
-            print(f"Extraction failed: {e}")
-            return config.DATA_DIR, False
+        if dataset_ext == 'zip':
+            try:
+                with zipfile.ZipFile(dataset_path, 'r') as zip_ref:
+                    zip_ref.extractall(extracted_path)
+                print("Extracted dataset.")
+            except Exception as e:
+                print(f"Extraction failed: {e}")
+                return config.DATA_DIR, False
+        elif dataset_ext =='tar.gz':
+            try:
+                with tarfile.open(dataset_path, 'r:gz') as tar:  # gzip 압축된 tar 파일
+                    tar.extractall(path=config.DATA_DIR)
+                print("Extracted dataset.")
+                try:
+                    with tarfile.open(os.path.join(extracted_path, 'train.tar.gz'), 'r:gz') as tar:  # gzip 압축된 tar 파일
+                       tar.extractall()#path=os.path.join(data_path_tar, 'train'))
+                    print("Extracted dataset.")
+                    
+                except Exception as e:
+                    print(f"Extraction failed: {e}")
+                    return config.DATA_DIR, False
+            except Exception as e:
+                print(f"Extraction failed: {e}")
+                return config.DATA_DIR, False
+            
     else:
         print("Dataset already extracted.\n")
     return extracted_path, True
+
+
+# def download_ravdess(config, dataset):
+#     url = "https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1"
+#     dataset_path = os.path.join(config.DATA_DIR, "RAVDESS_speech.zip")
+
+#     if not os.path.exists(dataset_path):
+#         print(f"Downloading dataset : {dataset.key}...")
+#         response = requests.get(url, stream=True)
+#         if response.status_code == 200:
+#             with open(dataset_path, 'wb') as f:
+#                 f.write(response.content)
+#             print("Download complete.")
+#         else:
+#             print("Failed to download the dataset.")
+#             return config.DATA_DIR, False
+#     else:
+#         print("Dataset already exists. Skipping download.\n")
+
+#     extracted_path = os.path.join(config.DATA_DIR, "RAVDESS_speech")
+#     if not os.path.exists(extracted_path):
+#         try:
+#             with zipfile.ZipFile(dataset_path, 'r') as zip_ref:
+#                 zip_ref.extractall(extracted_path)
+#             print("Extracted dataset.")
+#         except Exception as e:
+#             print(f"Extraction failed: {e}")
+#             return config.DATA_DIR, False
+#     else:
+#         print("Dataset already extracted.\n")
+#     return extracted_path, True
 
 def preprocess_data(data_dir):
     data = []
@@ -260,8 +320,8 @@ def balance_classes(data, labels):
     
     return np.concatenate(new_data), np.concatenate(new_labels)
 
-def load_data(config):
-    data_dir, status = download_ravdess(config)
+def load_data(config):#, dataset):
+    data_dir, status = download_dataset(config)#, dataset)
     if not status:
         raise Exception("Failed to download or extract the dataset.")
     return preprocess_data(data_dir)

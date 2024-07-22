@@ -47,6 +47,7 @@ def get_next_version(model_path):
 
 def print_menu():
     print("\n<<< NMA 2024 Emotion Recognition Model >>> - Choose an option:")
+    print("0. Download and Prepare Dataset")
     print("1. Train a new model")
     print("2. Resume training")
     print("3. Run hyperparameter search")
@@ -58,16 +59,14 @@ def print_menu():
 def main(args=None):
     config = Config()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # Best model info chk
-    chk_best_model_info(config)
-    ### Dataset
-    data, labels = load_data(config)
-    train_loader, val_loader, test_loader = prepare_dataloaders(data, labels, config)
+    
     
     if args is None:
         while True:
             choice = print_menu()
-            if choice == '1':
+            if choice == '0':
+                args = argparse.Namespace(mode='prep_data')
+            elif choice == '1':
                 args = argparse.Namespace(mode='train')
             elif choice == '2':
                 args = argparse.Namespace(mode='resume')
@@ -90,8 +89,15 @@ def main(args=None):
                 continue
             break
     
+    
+    
+    # Best model info chk
+    chk_best_model_info(config)
+    
+    
     config.CUR_MODE=args.mode
     config.WANDB_PROJECT = args.mode+'_'+config.MODEL
+    
     file_name, _ = os.path.splitext(os.path.basename(config.MODEL_SAVE_PATH))
     file_name = file_name.replace('best_model_', '')
     config.model_name=file_name
@@ -104,7 +110,19 @@ def main(args=None):
     os.makedirs(os.path.join(new_path, 'results'), exist_ok=True)
     os.makedirs(new_path, exist_ok=True)
     print(new_path)
-    if args.mode == 'train':
+        ### Dataset
+    if args.mode =='prep_data':
+        SELECT_DATA = input("Select dataset type\n1. Audio dataset (RAVDESS Speech)\n2. Multi-modal dataset (MELD)\n")
+        if SELECT_DATA =='1':
+            config.select_dataset = 'RAVDESS'
+        elif SELECT_DATA =='2':
+            config.select_dataset ='MELD'
+        print(f'Dataset: {config.select_dataset} will be prepared.')
+        data, labels = load_data(config) 
+        train_loader, val_loader, test_loader = prepare_dataloaders(data, labels, config)
+        
+    elif args.mode == 'train':
+        IS_RESUME=False
         if os.path.exists(config.MODEL_SAVE_PATH):
             config.MODEL_SAVE_PATH=generate_unique_filename(config.MODEL_SAVE_PATH)
             config.CKPT_SAVE_PATH=generate_unique_filename(config.CKPT_SAVE_PATH)
@@ -150,7 +168,6 @@ def main(args=None):
             os.makedirs(new_path, exist_ok=True)
             os.makedirs(os.path.join(new_path, 'results'), exist_ok=True)
             print(new_path)
-            
             
             additional_epochs = int(input("Number of epoch for training: "))
             print(f'Model will be trained for {additional_epochs} epochs')
