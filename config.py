@@ -15,10 +15,11 @@ from collections import namedtuple
 # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 @dataclass
 class Config:
-    
+    N_SAMPLE=2000
     dataset={"RAVDESS_speech": "https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1",
          "MELD": "https://huggingface.co/datasets/declare-lab/MELD/resolve/main/MELD.Raw.tar.gz"}
     select_dataset = "RAVDESS_speech"
+    
     model_name: str = ''
     early_stop_epoch: int = 10
     CUR_MODE: str ='' # current mode
@@ -67,6 +68,8 @@ class Config:
     MODEL_DIR: str = field(init=False)
     MODEL_SAVE_PATH: str = field(init=False)
     CKPT_SAVE_PATH: str = field(init=False)
+    extracted_path: str = ''
+    TARGET:str ='test'
     
     # Metric
     EvaluationResult = namedtuple('EvaluationResult', ['loss', 'accuracy', 'precision', 'recall', 'f1', 'labels', 'predictions'])

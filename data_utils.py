@@ -28,7 +28,117 @@ from sentence_transformers import SentenceTransformer
 # # url = "https://raw.githubusercontent.com/ataislucky/Data-Science/main/dataset/emotion_train.txt"
         
 from sklearn.preprocessing import StandardScaler
+import moviepy.editor as mp
 
+import os
+from tqdm import tqdm
+import moviepy.editor as mp
+
+# def prep_audio(config, text_train_df, destination_base_path, TARGET):
+#     os.makedirs(destination_base_path, exist_ok=True)
+#     if TARGET == 'train':
+#         TARGET_SPLIT = 'train_splits'
+#     elif TARGET == 'test':
+#         TARGET_SPLIT = 'output_repeated_splits_test'
+#     else:
+#         print('No target specified.')
+#         return
+
+#     for dialogue_id, utterance_id in tqdm(zip(text_train_df["Dialogue_ID"], text_train_df["Utterance_ID"])):
+#         # Source and destination paths
+#         source_path = os.path.join(config.DATA_DIR, 'MELD.Raw', TARGET, TARGET_SPLIT, f'dia{dialogue_id}_utt{utterance_id}.mp4')
+#         destination_path = os.path.join(destination_base_path, f'dia{dialogue_id}_utt{utterance_id}.wav')
+        
+#         # Check if the destination file already exists
+#         if os.path.exists(destination_path):
+#             print(f'{destination_path} already exists, skipping.')
+#             continue
+        
+#         # Load the video file
+#         video = mp.VideoFileClip(source_path)
+        
+#         # Extract the audio
+#         audio = video.audio
+        
+#         # Write the audio file to the destination path
+#         audio.write_audiofile(destination_path)
+#         audio.close()
+#         video.close()
+
+# import os
+# from tqdm import tqdm
+# import moviepy.editor as mp
+import os
+from tqdm import tqdm
+import moviepy.editor as mp
+
+def prep_audio(config, text_train_df, destination_base_path, TARGET):  # by Lek Hong
+    
+    os.makedirs(destination_base_path, exist_ok=True)
+    
+    if TARGET == 'train':
+        TARGET_SPLIT = 'train_splits'
+    elif TARGET == 'test':
+        TARGET_SPLIT = 'output_repeated_splits_test'
+    else:
+        print('No target specified.')
+        return
+
+    for dialogue_id, utterance_id in tqdm(zip(text_train_df["Dialogue_ID"], text_train_df["Utterance_ID"])):
+        # Source and destination paths
+        source_path = os.path.join(config.DATA_DIR, 'MELD.Raw', TARGET, TARGET_SPLIT, f'dia{dialogue_id}_utt{utterance_id}.mp4')
+        destination_path = os.path.join(destination_base_path, f'dia{dialogue_id}_utt{utterance_id}.wav')
+        
+        # Check if the destination audio file already exists
+        if os.path.exists(destination_path):
+            print(f"File {destination_path} already exists. Skipping...")
+            continue
+
+        try:
+            # Load the video file
+            video = mp.VideoFileClip(source_path)
+
+            # Extract the audio
+            audio = video.audio
+
+            if audio is None:
+                print(f"Audio extraction failed for {source_path}. Skipping...")
+                video.close()
+                continue
+
+            # Write the audio to the destination path
+            audio.write_audiofile(destination_path)
+
+            # Close the video and audio objects to release resources
+            audio.close()
+            video.close()
+
+        except Exception as e:
+            print(f"Error processing {source_path}: {e}")
+            continue
+
+# def prep_audio(config, text_train_df, destination_base_path, TARGET): # by Lek Hong
+    
+#     os.makedirs(destination_base_path, exist_ok=True)
+#     if TARGET=='train':
+#         TARGET_SPLIT='train_splits'
+#     elif TARGET=='test':
+#         TARGET_SPLIT='output_repeated_splits_test'
+#     else:
+#         print('no target.')
+#     for dialogue_id, utterance_id in tqdm(zip(text_train_df["Dialogue_ID"], text_train_df["Utterance_ID"])):
+#       # Source and destination paths
+#         source_path = os.path.join(config.DATA_DIR, 'MELD.Raw',  TARGET, TARGET_SPLIT, f'dia{dialogue_id}_utt{utterance_id}.mp4')
+#         destination_path = os.path.join(destination_base_path, f'dia{dialogue_id}_utt{utterance_id}.wav') #f'/content/drive/\
+#         #print(f'Source to Dest: {source_path} -> {destination_path}')
+#         # Load the video file
+#         video = mp.VideoFileClip(source_path)
+
+#         # Extract the audio
+#         audio = video.audio
+
+#         # Save the audio file
+        audio.write_audiofile(destination_path)
 
 def extract_features_and_labels(dataloader):
     all_features = []
@@ -98,9 +208,6 @@ processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base")
 wav2vec2_model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base")
 #wav2vec2_model.gradient_checkpointing_enable()
 
-
-
-
 def download_dataset(config):
     
     url = config.dataset[config.select_dataset]#"https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1"
@@ -112,6 +219,8 @@ def download_dataset(config):
         dataset_ext = 'tar.gz'
         extracted_path = os.path.join(config.DATA_DIR, f"{config.select_dataset}.Raw")
     dataset_path= extracted_path + '.'+dataset_ext
+    print('Extraction path: ', extracted_path, dataset_path)
+    config.extracted_path=extracted_path
 
     print(f'Dataset: {config.select_dataset}')
     if not os.path.exists(dataset_path):
@@ -126,8 +235,10 @@ def download_dataset(config):
             return config.DATA_DIR, False
     else:
         print("Dataset already exists. Skipping download.\n")
-
+    TARGET=config.TARGET
+    print(extracted_path)
     if not os.path.exists(extracted_path):
+        print('Data extraction starts.')
         if dataset_ext == 'zip':
             try:
                 with zipfile.ZipFile(dataset_path, 'r') as zip_ref:
@@ -140,53 +251,48 @@ def download_dataset(config):
             try:
                 with tarfile.open(dataset_path, 'r:gz') as tar:  # gzip 압축된 tar 파일
                     tar.extractall(path=config.DATA_DIR)
-                print("Extracted dataset.")
-                try:
-                    with tarfile.open(os.path.join(extracted_path, 'train.tar.gz'), 'r:gz') as tar:  # gzip 압축된 tar 파일
-                       tar.extractall()#path=os.path.join(data_path_tar, 'train'))
-                    print("Extracted dataset.")
-                    
-                except Exception as e:
-                    print(f"Extraction failed: {e}")
-                    return config.DATA_DIR, False
+                print("Extracted main dataset.")
+                
             except Exception as e:
-                print(f"Extraction failed: {e}")
+                print(f"Extraction failed - main: {e}")
                 return config.DATA_DIR, False
             
     else:
         print("Dataset already extracted.\n")
+        
+    if config.select_dataset=='MELD' and not os.path.exists(os.path.join(extracted_path, f'{TARGET}')):
+        print('######### MELD')
+        try:
+            path_tar2=os.path.join(extracted_path, f'{TARGET}.tar.gz')
+            print(path_tar2)
+                                
+            with tarfile.open(path_tar2, 'r:gz') as tar:  # gzip 압축된 tar 파일
+                path_tar3=os.path.join(extracted_path, f'{TARGET}')
+                print(path_tar3)
+                tar.extractall(path=path_tar3)
+            print("Extracted sub dataset.")
+            
+        except Exception as e:
+            print(f"Extraction failed - sub: {e}")
+            return config.DATA_DIR, False
     return extracted_path, True
+def preprocess_data_meld(data_dir, text_train_df):
+    data = []
+    labels = []
+    for root, _, files in os.walk(data_dir):
+        for file in files:
+            if file.endswith(".wav"):
+                file_path = os.path.join(root, file)
+                data.append(file_path)
 
+                dialogue_id = int(file.split("_")[0][3:])
+                utterance_id = int(file.split("_")[1].split(".")[0][3:])
+                label = text_train_df.loc[(text_train_df["Dialogue_ID"]==dialogue_id) & (text_train_df["Utterance_ID"]==utterance_id), "Emotion"].item()
+                labels.append(label)
 
-# def download_ravdess(config, dataset):
-#     url = "https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1"
-#     dataset_path = os.path.join(config.DATA_DIR, "RAVDESS_speech.zip")
-
-#     if not os.path.exists(dataset_path):
-#         print(f"Downloading dataset : {dataset.key}...")
-#         response = requests.get(url, stream=True)
-#         if response.status_code == 200:
-#             with open(dataset_path, 'wb') as f:
-#                 f.write(response.content)
-#             print("Download complete.")
-#         else:
-#             print("Failed to download the dataset.")
-#             return config.DATA_DIR, False
-#     else:
-#         print("Dataset already exists. Skipping download.\n")
-
-#     extracted_path = os.path.join(config.DATA_DIR, "RAVDESS_speech")
-#     if not os.path.exists(extracted_path):
-#         try:
-#             with zipfile.ZipFile(dataset_path, 'r') as zip_ref:
-#                 zip_ref.extractall(extracted_path)
-#             print("Extracted dataset.")
-#         except Exception as e:
-#             print(f"Extraction failed: {e}")
-#             return config.DATA_DIR, False
-#     else:
-#         print("Dataset already extracted.\n")
-#     return extracted_path, True
+    if len(data) == 0:
+        raise ValueError("No valid .wav files found in the dataset.")
+    return np.array(data), np.array(labels)
 
 def preprocess_data(data_dir):
     data = []
@@ -324,7 +430,7 @@ def load_data(config):#, dataset):
     data_dir, status = download_dataset(config)#, dataset)
     if not status:
         raise Exception("Failed to download or extract the dataset.")
-    return preprocess_data(data_dir)
+    return data_dir
 
 #### Text
 def preprocess_text(text):
