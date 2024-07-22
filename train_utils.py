@@ -65,8 +65,8 @@ def train_model(model, train_loader, val_loader, config, device, optimizer, crit
         'val': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []}
     }
     # Epoch info
-    if not config.IS_RESUME:
-        config.global_epoch = 0
+    # if not config.IS_RESUME:
+    #     config.global_epoch = 0
     print('Global epoch was: ', config.global_epoch)
     global_epoch = config.global_epoch#config.initial_epoch
     global_epoch+=1
