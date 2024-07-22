@@ -114,7 +114,7 @@ def main(args=None):
     if args.mode =='prep_data':
         SELECT_DATA = input("Select dataset type\n1. Audio dataset (RAVDESS Speech)\n2. Multi-modal dataset (MELD)\n")
         if SELECT_DATA =='1':
-            config.select_dataset = 'RAVDESS'
+            config.select_dataset = 'RAVDESS_speech'
         elif SELECT_DATA =='2':
             config.select_dataset ='MELD'
         print(f'Dataset: {config.select_dataset} will be prepared.')
