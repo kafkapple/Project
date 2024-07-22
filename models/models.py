@@ -65,10 +65,14 @@ def read_best_model_info(config):
             return f.read().strip()
     return None
   
-def write_best_model_info(config, info):
+def write_best_model_info(config, info, dict_models):
     info_path = os.path.join(config.MODEL_BASE_DIR, 'best_model_info.txt')
     with open(info_path, 'w') as f:
         f.write(info)
+        for i in dict_models:
+            f.write(f'Model: {i} / {dict_models[i]}')
+            
+        
 
 def find_best_model(config, test_loader, device, exclude_models=None):
     model_folders = [f for f in os.listdir(config.MODEL_BASE_DIR) if os.path.isdir(os.path.join(config.MODEL_BASE_DIR, f))]
@@ -123,7 +127,7 @@ def find_best_model(config, test_loader, device, exclude_models=None):
         
         # Save best model info
         info = f"Best model path: {best_model_path}\nBest performance (Loss): {best_performance:.4f}"
-        write_best_model_info(config, info)
+        write_best_model_info(config, info, dict_models)
     else:
         print("\nNo valid models found or all models failed evaluation.")
     
@@ -155,7 +159,7 @@ def prep_model(config, train_loader, is_sweep=False):
     #### Model loading or start new
     if config.CUR_MODE == 'train' or config.CUR_MODE =='benchmark':
         print('New training / benchmark begins.')
-        global_epoch = 1
+        global_epoch = 0
         id_wandb = wandb.util.generate_id()
         print(f'Wandb id generated: {id_wandb}')
         config.id_wandb = id_wandb
@@ -171,7 +175,7 @@ def prep_model(config, train_loader, is_sweep=False):
         wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, resume="must", settings=wandb.Settings(start_method="thread"))
     elif config.CUR_MODE == 'sweep':
         print('\n####### Sweep starts. ')
-        global_epoch = 1
+        global_epoch = 0
         #id_wandb = wandb.util.generate_id()
         #config.WANDB_PROJECT+="_"+config.CUR_MODE
         id_wandb=config.id_wandb
@@ -180,7 +184,7 @@ def prep_model(config, train_loader, is_sweep=False):
 
     else:
         print('\n\n######### to be checked #####\n\n')
-        global_epoch = 1
+        global_epoch = 0
         id_wandb = wandb.util.generate_id()
         print(f'Wandb id generated: {id_wandb}')
         config.id_wandb = id_wandb

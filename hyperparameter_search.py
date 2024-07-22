@@ -13,7 +13,7 @@ def run_hyperparameter_sweep(config, train_loader, val_loader, model=None):
     if config.CUR_MODE == "benchmark":
         X_train_scaled, y_train = prep_data_for_benchmark(train_loader)
         X_val_scaled, y_val = prep_data_for_benchmark(val_loader)
-        if config.model_benchmark == 'lr':
+        if config.model_benchmark == 'LogisticRegression':
             config.sweep_config = {
             'method': 'bayes',
             'metric': {'goal': 'minimize', 'name': 'val.loss' },
@@ -24,6 +24,17 @@ def run_hyperparameter_sweep(config, train_loader, val_loader, model=None):
                 "penalty":{"values":['l1', 'l2','elasticnet']}
             }
             }
+            config.CONFIG_DEFAULTS = {
+                    "resume":False,
+                    "architecture": 'LogisticRegression',
+                    "dataset": f"{config.DATA_NAME}",
+                    "max_iter":1000,
+                    "C_val": 1,
+                    "solver": 'saga',
+                    'penalty': 'elasticnet'
+
+                    }  
+            
         elif config.model_benchmark =='svm':
             config.sweep_config = {
             'method': 'bayes',
@@ -34,37 +45,58 @@ def run_hyperparameter_sweep(config, train_loader, val_loader, model=None):
                 'kernel': {'values': ['linear', 'rbf']},
                 'gamma': {'values':[0.001, 0.0001]},
             }
-            }   
+            }
+            config.CONFIG_DEFAULTS = {
+                    "resume":False,
+                    "architecture": "SVM",
+                    "dataset": f"{config.DATA_NAME}",
+                    "max_iter":1000,
+                    "C_val": 1,
+                    "kernel": 'rbf',
+                    'gamma': 0.001
+
+                    }  
+            
         else:
             print('Error. no benchmark model')
             
-
-    if config.SWEEP_NAIVE:
+    if config.CUR_MODE =='benchmark':
+        config.WANDB_PROJECT="Benchmark"
         sweep_id = wandb.sweep(config.sweep_config, project=config.WANDB_PROJECT)
+        
+    else: #config.SWEEP_NAIVE:
+        sweep_id="8lad6k0u" #
+        config.WANDB_PROJECT="NMA_Project_SER_sweep_together_v1_e5"
+        
+        sweep_id = f"{config.ENTITY}/{config.WANDB_PROJECT}/{sweep_id}"
+        
+        
         sweep_id_full = f"{config.ENTITY}/{config.WANDB_PROJECT}/{sweep_id}"#wandb.sweep
         config.sweep_id = sweep_id_full
-        print(f'\nFirst Sweep starts. Sweep id: {sweep_id}\n')
-    else:
-        sweep_id = config.sweep_id
-        print(f'Previous Sweep Sweep id is loaded : {sweep_id}')
+        print(f'\nSweep starts. Sweep id: {sweep_id}\n')
+
+        # sweep_id = config.sweep_id
+        # print(f'Previous Sweep Sweep id is loaded : {sweep_id}')
 
     def train():
         
-        id_wandb=wandb.util.generate_id()
-    
-        wandb.init(
+        # id_wandb=wandb.util.generate_id()
+        # #if not config.CUR_MODE == "benchmark":
+        # wandb.init(
         # id=id_wandb,
         # project=config.WANDB_PROJECT,
         
-            #name=config.WANDB_NAME, #
-            config=config.CONFIG_DEFAULTS,
-            resume=False
-        )
+        #     #name=config.WANDB_NAME, #
+        #     config=config.CONFIG_DEFAULTS,
+        #     resume=False
+        # )
+        # else: # benchmark
+            
         print('after init')
         if config.CUR_MODE == "benchmark":
             config.max_iter = wandb.config.max_iter
             config.C_val = wandb.config.C_val
-            if config.model_benchmark == 'lr':
+            if config.model_benchmark == 'LogisticRegression':
                 config.solver = wandb.config.solver
                 config.penalty = wandb.config.penalty
             elif config.model_benchmark =='svm':
@@ -78,7 +110,7 @@ def run_hyperparameter_sweep(config, train_loader, val_loader, model=None):
             print('\nafter log_metric\n')
         else:
             # Update config with sweep parameters
-            config.LEARNING_RATE = wandb.config.learning_rate
+            config.lr = wandb.config.lr
             config.BATCH_SIZE = wandb.config.batch_size
             config.DROPOUT_RATE = wandb.config.dropout_rate
             config.ACTIVATION = wandb.config.activation
@@ -90,7 +122,7 @@ def run_hyperparameter_sweep(config, train_loader, val_loader, model=None):
             
             train_model(model, train_loader, val_loader, config, device, optimizer, criterion)
             visualize_results(config, model, val_loader, device, config.history, 'test')
-
+    
     wandb.agent(sweep_id, function=train, count=config.N_SWEEP)
     wandb.finish()
  

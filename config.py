@@ -40,7 +40,7 @@ class Config:
     ACTIVATION: str = "relu"
     OPTIMIZER: str = "adam"
     
-    BOOL = True
+    BOOL = False 
     SCHEDULER: bool = BOOL
     GRADIENT_CLIP: bool = BOOL
     
@@ -93,7 +93,7 @@ class Config:
         'method': 'bayes',
         'metric': {'goal': 'maximize', 'name': 'val.loss' },
         'parameters': {
-            'learning_rate': {'min': 0.0001, 'max': 0.01},
+            'lr': {'min': 0.0001, 'max': 0.01},
             'batch_size': {'values': [16, 32, 64, 128]},
            # 'num_epochs': {'min': 5, 'max': 50},
             'dropout_rate': {'min': 0.1, 'max': 0.6},

@@ -55,11 +55,10 @@ def print_menu():
     print("5. Compare with baseline models")
     print("6. Find best performing model")
     print("7. Exit")
-    return input("Enter your choice (1-7): ")
+    return input("Enter your choice (0-7): ")
 def main(args=None):
     config = Config()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
     
     if args is None:
         while True:
@@ -90,6 +89,10 @@ def main(args=None):
             break
     
     
+    # Dataset
+    
+    data, labels = load_data(config) 
+    train_loader, val_loader, test_loader = prepare_dataloaders(data, labels, config)
     
     # Best model info chk
     chk_best_model_info(config)
@@ -110,6 +113,7 @@ def main(args=None):
     os.makedirs(os.path.join(new_path, 'results'), exist_ok=True)
     os.makedirs(new_path, exist_ok=True)
     print(new_path)
+    print('epoch: ',config.global_epoch)
         ### Dataset
     if args.mode =='prep_data':
         SELECT_DATA = input("Select dataset type\n1. Audio dataset (RAVDESS Speech)\n2. Multi-modal dataset (MELD)\n")
@@ -139,10 +143,15 @@ def main(args=None):
             os.makedirs(new_path, exist_ok=True)
             os.makedirs(os.path.join(new_path, 'results'), exist_ok=True)
             print(new_path)
+
             
         config.NUM_EPOCHS = int(input("Number of epoch for training: "))
+        
         model, optimizer, criterion, device = prep_model(config, train_loader, is_sweep=False)
+        
+        #### !! epoch +1 but not wanted?! -> model prep problem
         print('Model initialization...')
+
         
         #model.apply(init_weights)
         history, best_val_loss, best_val_acc = train_model(model, train_loader, val_loader, config, device, optimizer, criterion)
@@ -175,7 +184,7 @@ def main(args=None):
             model, optimizer, criterion, device = prep_model(config, train_loader, is_sweep=False)
             _,_, global_epoch, best_val_loss,_ = load_checkpoint(config, model, optimizer, device)
             
-            #config.global_epoch = global_epoch+1
+         
             config.NUM_EPOCHS = additional_epochs
             print(f'Preparing resume training. Global epoch is set to previous epoch +1: {config.global_epoch}')
             

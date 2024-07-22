@@ -61,7 +61,7 @@ def compare_models(deep_model, train_loader, val_loader, test_loader, config, de
         joblib.dump(svm_model, svm_path)
         print(svm_path)
 
-    config.model_benchmark = 'lr'
+    config.model_benchmark = 'LogisticRegression'
     # Logistic Regression 모델      
     lr_path = os.path.join(config.MODEL_BASE_DIR, 'baseline_model_LogisticRegression.joblib')
     print(lr_path)
