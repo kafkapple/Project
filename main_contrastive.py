@@ -7,7 +7,6 @@ import numpy as np
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 
-# 임베딩 모델 정의
 class TextEmbeddingModel(nn.Module):
     def __init__(self):
         super().__init__()
@@ -22,13 +21,13 @@ class AudioEmbeddingModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.wav2vec = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base")
-        self.fc = nn.Linear(768, 128)  # 임베딩 차원을 128로 줄임
+        self.fc = nn.Linear(768, 128)  # embedding dim -> reduce 128
 
     def forward(self, input_values):
         outputs = self.wav2vec(input_values)
         return self.fc(outputs.last_hidden_state.mean(dim=1))
 
-# Triplet Loss 정의
+# Triplet Loss 
 class TripletLoss(nn.Module):
     def __init__(self, margin=1.0):
         super().__init__()
@@ -39,8 +38,7 @@ class TripletLoss(nn.Module):
         distance_negative = (anchor - negative).pow(2).sum(1)
         losses = torch.relu(distance_positive - distance_negative + self.margin)
         return losses.mean()
-
-# 데이터셋 및 데이터 로더 (예시)
+    
 class TripletDataset(Dataset):
     def __init__(self, data, labels):
         self.data = data
@@ -53,11 +51,11 @@ class TripletDataset(Dataset):
         anchor = self.data[idx]
         anchor_label = self.labels[idx]
 
-        # 같은 클래스에서 positive 샘플 선택
+        # Positive sample within class
         positive_idx = np.random.choice(np.where(self.labels == anchor_label)[0])
         positive = self.data[positive_idx]
 
-        # 다른 클래스에서 negative 샘플 선택
+        # Negative sample from other class
         negative_label = np.random.choice(list(set(self.labels) - {anchor_label}))
         negative_idx = np.random.choice(np.where(self.labels == negative_label)[0])
         negative = self.data[negative_idx]
@@ -85,7 +83,6 @@ def train_embedding(model, dataloader, criterion, optimizer, device, num_epochs)
         
         print(f"Epoch {epoch+1}/{num_epochs}, Loss: {total_loss/len(dataloader):.4f}")
 
-# 임베딩 시각화 함수
 def visualize_embeddings(model, dataloader, device):
     model.eval()
     embeddings = []
@@ -109,21 +106,18 @@ def visualize_embeddings(model, dataloader, device):
     plt.title("Embeddings Visualization (t-SNE)")
     plt.show()
 
-# 메인 실행 코드
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # 텍스트 모델
     text_model = TextEmbeddingModel().to(device)
     text_criterion = TripletLoss()
     text_optimizer = optim.Adam(text_model.parameters(), lr=1e-5)
 
-    # 오디오 모델
+  
     audio_model = AudioEmbeddingModel().to(device)
     audio_criterion = TripletLoss()
     audio_optimizer = optim.Adam(audio_model.parameters(), lr=1e-5)
 
-    # 데이터 로더 (예시, 실제 데이터에 맞게 수정 필요)
     text_data = torch.randn(1000, 512)  # 임의의 텍스트 데이터
     audio_data = torch.randn(1000, 16000)  # 임의의 오디오 데이터
     labels = torch.randint(0, 6, (1000,))  # 6개 클래스

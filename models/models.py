@@ -8,6 +8,10 @@ from train_utils import load_checkpoint
 import numpy as np
 import random
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from glob import glob
+
+from train_utils import evaluate_model
+
 
 def set_seed(seed):
     random.seed(seed)
@@ -21,6 +25,110 @@ def set_seed(seed):
         #print(torch.cuda.current_device()) 
         print(f'\n#####GPU verified. {torch.cuda.get_device_name(0)}')
     return device
+
+def list_models(config):
+    models = glob(os.path.join(config.MODEL_BASE_DIR, '**', '*best_model*.pth'), recursive=True)
+    if not models:
+        print("No trained models found.")
+        return None
+    print("Available models:")
+    for i, model_path in enumerate(models, 1):
+        print(f"{i}. {model_path}")
+    return models
+
+def chk_best_model_info(config):
+    if os.path.exists(config.best_model_info_path):
+        print(f'\n##### Trained model info exists #####\n')
+        with open(config.best_model_info_path, 'r') as f:
+            best_model_info = f.read().strip()
+        
+        best_model_path = None
+        for line in best_model_info.split('\n'):
+            if line.startswith("Best model path:"):
+                best_model_path = line.split(": ", 1)[1].strip()
+                break
+        
+        if best_model_path:
+            config.MODEL_SAVE_PATH = best_model_path
+            config.CKPT_SAVE_PATH = best_model_path.replace("best_model", "checkpoint")
+            print(f"Current best model: {config.MODEL_SAVE_PATH}")
+        else:
+            print("Best model information found, but path is not available.")
+    else:
+        print("No best model information found.")
+
+
+def read_best_model_info(config):
+    info_path = os.path.join(config.MODEL_BASE_DIR, 'best_model_info.txt')
+    if os.path.exists(info_path):
+        with open(info_path, 'r') as f:
+            return f.read().strip()
+    return None
+  
+def write_best_model_info(config, info):
+    info_path = os.path.join(config.MODEL_BASE_DIR, 'best_model_info.txt')
+    with open(info_path, 'w') as f:
+        f.write(info)
+
+def find_best_model(config, test_loader, device, exclude_models=None):
+    model_folders = [f for f in os.listdir(config.MODEL_BASE_DIR) if os.path.isdir(os.path.join(config.MODEL_BASE_DIR, f))]
+    best_models = []
+    
+    for folder in model_folders:
+        folder_path = os.path.join(config.MODEL_BASE_DIR, folder)
+        best_model_files = glob(os.path.join(folder_path, '*best_model*.pth'))
+        best_models.extend(best_model_files)
+    
+    if exclude_models:
+        best_models = [m for m in best_models if m not in exclude_models]
+    
+    if not best_models:
+        print(f"No new best model files found in {config.MODEL_BASE_DIR}")
+        return None
+    
+    print(f"Found {len(best_models)} putative best model files:")
+    for model_path in best_models:
+        print(model_path)
+    
+    best_performance = float('inf')  # Using loss as the metric, lower is better
+    best_model_path = None
+    dict_models={}
+    for model_path in best_models:
+        
+        try:
+            model = get_model(config, test_loader)
+            model.load_state_dict(torch.load(model_path, map_location=device))
+            model.to(device)
+            model.eval()
+            
+            loss, accuracy, _, _, f1, _, _ = evaluate_model(config, model, test_loader, torch.nn.CrossEntropyLoss(), device)
+            
+            dict_models[model_path]={'loss':loss, 'accuracy':accuracy,'f1':f1}
+            
+            print(f"Model: {model_path}")
+            print(f"Test Loss: {loss:.4f}")
+            
+            if loss < best_performance:
+                best_performance = loss
+                best_model_path = model_path
+        
+        except Exception as e:
+            print(f"Error evaluating model {model_path}: {str(e)}")
+            continue
+    
+    if best_model_path:
+        print(f"\nBest performing model: {best_model_path}")
+        print(f"Best performance (Loss): {best_performance:.4f}")
+        print(f"Other metrics\n{dict_models[best_model_path]}")
+        
+        # Save best model info
+        info = f"Best model path: {best_model_path}\nBest performance (Loss): {best_performance:.4f}"
+        write_best_model_info(config, info)
+    else:
+        print("\nNo valid models found or all models failed evaluation.")
+    
+    return best_model_path
+
 def prep_model(config, train_loader, is_sweep=False):
     device = set_seed(config.SEED)
     print(f"Using device: {device}")
@@ -45,36 +153,70 @@ def prep_model(config, train_loader, is_sweep=False):
     
     criterion = torch.nn.CrossEntropyLoss()
     #### Model loading or start new
-    if os.path.exists(config.CKPT_SAVE_PATH):
-        model, optimizer, initial_epoch, best_val_accuracy= load_checkpoint(config, model, optimizer, device)
-        if not is_sweep: # load model
-            id_wandb = wandb.util.generate_id()
-            print(f"Resuming training from epoch {initial_epoch}. Best val accuracy: {best_val_accuracy:.3f}\nWandb id loaded: {config.id_wandb}\nWandb project: {config.WANDB_PROJECT}")
-            if config.CUR_MODE == 'benchmark':
-                
-                #config.WANDB_PROJECT+= "_"+config.CUR_MODE
-                print(f'But this is for benchmark. New wandb id is generated: {id_wandb}\nWandb project: {config.WANDB_PROJECT}')
-              
-            config.id_wandb=id_wandb
-            wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, settings=wandb.Settings(start_method="thread"))
-        else: 
-            print('\n####### Sweep starts. ')
-            initial_epoch = 1
-            #id_wandb = wandb.util.generate_id()
-            #config.WANDB_PROJECT+="_"+config.CUR_MODE
-            id_wandb=config.id_wandb
-            wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, resume=False, settings=wandb.Settings(start_method="thread"))
-            model = get_model(config, train_loader)
-    else:
-        print('No trained data.')
-        initial_epoch = 1
+    if config.CUR_MODE == 'train' or config.CUR_MODE =='benchmark':
+        print('New training / benchmark begins.')
+        global_epoch = 1
         id_wandb = wandb.util.generate_id()
         print(f'Wandb id generated: {id_wandb}')
-        wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS)
+        config.id_wandb = id_wandb
+        wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS)#, resume=True)
+        model = get_model(config, train_loader)
+    elif config.CUR_MODE == 'resume':
+        
+        model, optimizer, global_epoch, best_val_accuracy, id_wandb= load_checkpoint(config, model, optimizer, device)
+   
+        print(f"Resuming training from epoch {global_epoch}. Best val accuracy: {best_val_accuracy:.3f}\nWandb id loaded: {config.id_wandb}\nWandb project: {config.WANDB_PROJECT}")
+        
+        config.id_wandb=id_wandb
+        wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, resume="must", settings=wandb.Settings(start_method="thread"))
+    elif config.CUR_MODE == 'sweep':
+        print('\n####### Sweep starts. ')
+        global_epoch = 1
+        #id_wandb = wandb.util.generate_id()
+        #config.WANDB_PROJECT+="_"+config.CUR_MODE
+        id_wandb=config.id_wandb
+        wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, resume=False, settings=wandb.Settings(start_method="thread"))
         model = get_model(config, train_loader)
 
-    config.initial_epoch = initial_epoch
-    config.id_wandb = id_wandb
+    else:
+        print('\n\n######### to be checked #####\n\n')
+        global_epoch = 1
+        id_wandb = wandb.util.generate_id()
+        print(f'Wandb id generated: {id_wandb}')
+        config.id_wandb = id_wandb
+        
+        wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS)
+        
+    # if os.path.exists(config.CKPT_SAVE_PATH) and config.IS_RESUME:
+    #     model, optimizer, global_epoch, best_val_accuracy, id_wandb= load_checkpoint(config, model, optimizer, device)
+    #     if not is_sweep: # load model
+    #         #id_wandb = wandb.util.generate_id()
+    #         print(f"Resuming training from epoch {global_epoch}. Best val accuracy: {best_val_accuracy:.3f}\nWandb id loaded: {config.id_wandb}\nWandb project: {config.WANDB_PROJECT}")
+    #         if config.CUR_MODE == 'benchmark':
+    #             #config.WANDB_PROJECT+= "_"+config.CUR_MODE
+    #             print(f'But this is for benchmark. New wandb id is generated: {id_wandb}\nWandb project: {config.WANDB_PROJECT}')
+              
+    #         config.id_wandb=id_wandb
+    #         wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, resum=True, settings=wandb.Settings(start_method="thread"))
+    #     else: 
+    #         print('\n####### Sweep starts. ')
+    #         global_epoch = 1
+    #         #id_wandb = wandb.util.generate_id()
+    #         #config.WANDB_PROJECT+="_"+config.CUR_MODE
+    #         id_wandb=config.id_wandb
+    #         wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, resume=False, settings=wandb.Settings(start_method="thread"))
+    #         model = get_model(config, train_loader)
+    # else:
+    #     print('No trained data was given. New training begins.')
+    #     global_epoch = 1
+    #     id_wandb = wandb.util.generate_id()
+    #     print(f'Wandb id generated: {id_wandb}')
+    #     config.id_wandb = id_wandb
+        
+    #     wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS)#, resume=True)
+    #     model = get_model(config, train_loader)
+    config.global_epoch = global_epoch
+
     model = model.to(device)
     return model, optimizer, criterion, device
 
@@ -83,8 +225,8 @@ def get_model(config, train_loader):
         model_class = EmotionRecognitionModel_v1
     elif config.MODEL == 'wav2vec_v2': 
         model_class = EmotionRecognitionModel_v2
-    elif config.MODEL == 'SVM_C':
-        return SVMClassifier(train_loader.dataset[0][0].shape[1], num_classes=len(config.LABELS_EMOTION))
+    # elif config.MODEL == 'SVM_C':
+    #     return SVMClassifier(train_loader.dataset[0][0].shape[1], num_classes=len(config.LABELS_EMOTION))
     else:
         raise ValueError(f"Unknown model type: {config.MODEL}")
     
@@ -94,23 +236,25 @@ def get_model(config, train_loader):
         dropout_rate=config.DROPOUT_RATE,
         activation=config.ACTIVATION
     )
-class SVMClassifier:
-    def __init__(self, input_size, num_classes):
-        self.model = SVC(kernel='rbf')
-        self.input_size=input_size
-        self.num_classes=num_classes
+    
+# ### Models
+# class SVMClassifier:
+#     def __init__(self, input_size, num_classes):
+#         self.model = SVC(kernel='rbf')
+#         self.input_size=input_size
+#         self.num_classes=num_classes
 
-    def fit(self, X, y):
-        self.model.fit(X, y)
+#     def fit(self, X, y):
+#         self.model.fit(X, y)
 
-    def predict(self, X):
-        return self.model.predict(X)
+#     def predict(self, X):
+#         return self.model.predict(X)
 
-    def save(self, path):
-        joblib.dump(self.model, path)
+#     def save(self, path):
+#         joblib.dump(self.model, path)
 
-    def load(self, path):
-        self.model = joblib.load(path)
+#     def load(self, path):
+#         self.model = joblib.load(path)
         
 class EmotionRecognitionBase(nn.Module):
     def __init__(self, input_size, num_classes, dropout_rate, activation):

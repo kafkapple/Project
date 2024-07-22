@@ -9,11 +9,16 @@ import torch
 from scipy.stats import spearmanr
 import pandas as pd
 from tqdm import tqdm
+import os
 
+# def visualize_metric(model, data_loader):
+#     fig = plot_confusion_matrix(all_labels, all_preds, config.LABELS_EMOTION)
+    
 def save_and_log_figure(stage, fig, config, name, title):
     """Save figure to file and log to wandb"""
-    fig.savefig(f"{config.MODEL_DIR}/{name}.png")
-    wandb.log({f"{stage}":{f"{name}": wandb.Image(fig, caption=title)}})
+    
+    fig.savefig(os.path.join(config.MODEL_DIR, 'results',f"{config.model_name}_{name}_{config.global_epoch}.png"))
+    wandb.log({f"{stage}":{f"{name}": wandb.Image(fig, caption=title)}}, step=config.global_epoch)
     
 def visualize_results(config, model, data_loader, device, history, stage):
     print('\nVisualization of results starts.\n')
@@ -57,7 +62,7 @@ def visualize_results(config, model, data_loader, device, history, stage):
 
     # Confusion Matrix
     fig = plot_confusion_matrix(all_labels, all_preds, config.LABELS_EMOTION)
-    save_and_log_figure(stage, fig, config, "confusion_matrix", f"{stage.capitalize()} Confusion Matrix")
+    save_and_log_figure(stage, fig, config, "confusion_matrix", f"{stage} Confusion Matrix")
     plt.close(fig)
 
     # Embeddings visualization
@@ -68,7 +73,7 @@ def visualize_results(config, model, data_loader, device, history, stage):
         all_embeddings = all_embeddings[indices]
         all_labels = all_labels[indices]
         
-    embeddings, labels, pred = extract_embeddings_and_predictions(model, data_loader, device)
+    embeddings, labels, _ = extract_embeddings_and_predictions(model, data_loader, device)
     
     print(f"Number of embeddings: {len(embeddings)}")
     print(f"Number of labels: {len(labels)}")
@@ -76,6 +81,10 @@ def visualize_results(config, model, data_loader, device, history, stage):
     fig = visualize_embeddings(config, embeddings, labels)
     
     save_and_log_figure(stage, fig, config, "embeddings", f"{stage.capitalize()} Embeddings (t-SNE)")
+    plt.close(fig)
+    
+    fig = perform_rsa(model, data_loader, config.device)
+    save_and_log_figure(stage, fig, config, "Representation_similarity", f"{stage.capitalize()}")
     plt.close(fig)
 
 def extract_embeddings_and_predictions(model, data_loader, device):

@@ -6,6 +6,16 @@ import os
 from collections import namedtuple
 from visualization import visualize_results
 
+def evaluate_baseline(model, X_test, y_test, config):
+    y_pred = model.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, average=config.METRIC_AVG)
+    recall = recall_score(y_test, y_pred, average=config.METRIC_AVG)
+    f1 = f1_score(y_test, y_pred, average=config.METRIC_AVG)
+    log_loss = (y_test, y_pred)
+    return log_loss, accuracy, precision, recall, f1, y_pred
+
+
 def load_checkpoint(config, model, optimizer, device):
     ckpt_path=config.CKPT_SAVE_PATH
     if os.path.exists(ckpt_path):
@@ -13,83 +23,127 @@ def load_checkpoint(config, model, optimizer, device):
         model.load_state_dict(checkpoint['model_state_dict'])
         if optimizer is not None:
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            print('Loading Optimizer info. ')
+        if config.SCHEDULER:
+            ### Scheduler    
+            T_max = config.NUM_EPOCHS  
+            eta_min = config.eta_min
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
             
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
-        if 'scheduler_state_dict' in checkpoint and scheduler is not None:
-            scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        start_epoch = checkpoint['epoch'] + 1  #
+            if 'scheduler_state_dict' in checkpoint and scheduler is not None:
+                scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+                print('Loading Scheduler info.')
+        
+        global_epoch=checkpoint['global_epoch']
 
-        best_val_accuracy = checkpoint['best_val_accuracy']
+        print(f'Previously, total number of epoch: {global_epoch} was trained.')
+              #\nStart from epoch: {start_epoch}\n')
+
+        best_val_loss = checkpoint['best_val_loss']
         try:
             config.id_wandb = checkpoint['id_wandb']
+        except:
+            print('no wand id.')   
+        try:
             config.sweep_id = checkpoint['sweep_id']
         except:
-            print('There is a Checkpoint, but No wandb id or sweep data is found.')
-        return model, optimizer, start_epoch, best_val_accuracy
+            print('There is a Checkpoint, but No sweep data is found.')
+            
+        return model, optimizer, global_epoch, best_val_loss, config.id_wandb
     else:
         print("No checkpoint found.")
         return model, optimizer, 0, 0, wandb.util.generate_id()
     
 
 def train_model(model, train_loader, val_loader, config, device, optimizer, criterion):
-    best_val_accuracy = 0
+    best_val_loss = 1000
+    best_val_acc=0.0
+    early_stop_counter = 0
+    
+    
     history = {
         'train': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []},
         'val': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []}
     }
-     # 
-    start_epoch = config.initial_epoch  
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5, verbose=True)
-
+    # Epoch info
+    print('Global epoch was: ', config.global_epoch)
+    global_epoch = config.global_epoch#config.initial_epoch
+    global_epoch+=1
+    print(f'global epoch updated: {global_epoch}')
+    config.global_epoch=global_epoch
+    start_epoch = global_epoch
+    end_epoch=config.global_epoch + config.NUM_EPOCHS
     
-    for epoch in range(start_epoch, start_epoch + config.NUM_EPOCHS):
-        # Train
-        train_metrics = train_epoch(config, model, train_loader, criterion, optimizer, device)
-        
-        # Validate
-        val_metrics = evaluate_model(config, model, val_loader, criterion, device)
-        
+    if config.SCHEDULER:
+        T_max = config.NUM_EPOCHS 
+        eta_min = config.eta_min 
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
+    
+    progress_bar = tqdm(range(start_epoch, end_epoch), desc="[ Total Epoch Progress ]")
+
+    for epoch in progress_bar:
+        print(f"\nGlobal Epoch [{global_epoch}/{end_epoch - 1}]")
+        train_metrics = train_epoch(config, model, train_loader, criterion, optimizer, device) #train
+        val_metrics = evaluate_model(config, model, val_loader, criterion, device) #val
         # Update history
         for i, metric in enumerate(['loss', 'accuracy', 'precision', 'recall', 'f1']):
             history['train'][metric].append(train_metrics[i])
             history['val'][metric].append(val_metrics[i])
         
-        print(f"Epoch [{epoch}/{start_epoch + config.NUM_EPOCHS - 1}]")
         print(f"Train - Loss: {train_metrics[0]:.4f}, Accuracy: {train_metrics[1]:.4f}, F1: {train_metrics[4]:.4f}")
         print(f"Val - Loss: {val_metrics[0]:.4f}, Accuracy: {val_metrics[1]:.4f}, F1: {val_metrics[4]:.4f}")
         
         # Log metrics
-        log_metrics('train', train_metrics, epoch)
-        log_metrics('val', val_metrics[:5], epoch)  # val_metrics might have 7 values, we only need first 5
+        log_metrics('train', train_metrics, global_epoch)
+        log_metrics('val', val_metrics[:5], global_epoch)  # val_metrics might have 7 values, we only need first 5
         
-        if epoch % config.N_STEP_FIG ==0:
+        if global_epoch % config.N_STEP_FIG ==0: # visualization for val data 
             visualize_results(config, model, val_loader, device, history, 'val')
+        if config.SCHEDULER:
+            scheduler.step()#val_metrics[0]) #[0] val loss
         
-        scheduler.step(val_metrics[0]) #[0] val loss
-        
-        if val_metrics[1] > best_val_accuracy:  # val_metrics[1] is accuracy
-            best_val_accuracy = val_metrics[1]
+        print(f'Val loss/Best val loss:{val_metrics[0]:.4f}/{best_val_loss:.4f}')
+        if val_metrics[0] < best_val_loss: #accuracy:  # val_metrics[1] is accuracy
+            best_val_loss = val_metrics[0]
+            # torch.save(model.state_dict(), config.MODEL_SAVE_PATH)
+            # print(f"Best model saved to {config.MODEL_SAVE_PATH}")
+            early_stop_counter = 0 # reset
+        else:
+            early_stop_counter+=1
+        print(f'Val acc/Best val acc:{val_metrics[1]:.4f}/{best_val_acc:.4f}')
+        if val_metrics[1] > best_val_acc:
+            best_val_acc = val_metrics[1]
             torch.save(model.state_dict(), config.MODEL_SAVE_PATH)
-            print(f"Best model saved to {config.MODEL_SAVE_PATH}")
-        
+            print(f"New Best Model with higher accuracy found.\nBest model saved to {config.MODEL_SAVE_PATH}")
+            
         # Save checkpoint
         ckpt = {
-            'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict(), 
-            'best_val_accuracy': best_val_accuracy,
-            'id_wandb': wandb.run.id
+            'best_val_loss': best_val_loss,
+            'id_wandb': wandb.run.id,
+            'global_epoch': global_epoch
         }
         if config.IS_SWEEP:
             print(f'Sweep is finished. ID is saved: {config.sweep_id}')
             ckpt['sweep_id']=config.sweep_id
+        if config.SCHEDULER:
+            ckpt['scheduler_state_dict']= scheduler.state_dict()
+            
         torch.save(ckpt, config.CKPT_SAVE_PATH)
 
-        print(f"Checkpoint saved to {config.CKPT_SAVE_PATH} at epoch {epoch+1}\n{ckpt['id_wandb']}\n")
+        print(f"Checkpoint saved to {config.CKPT_SAVE_PATH} at global epoch: {global_epoch}\n{ckpt['id_wandb']}\n")
         
-
-    return history, best_val_accuracy
+        current_lr = optimizer.param_groups[0]['lr']
+        print(f"Current learning rate: {current_lr}")
+        wandb.log({"learning_rate": current_lr}, step=global_epoch)
+                
+        
+        if early_stop_counter >= config.early_stop_epoch:
+            print("Early Stopping!")
+            break
+    
+    return history, best_val_loss, best_val_acc
 def train_epoch(config, model, dataloader, criterion, optimizer, device):
     model.train()
     running_loss = 0.0
@@ -104,6 +158,11 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
         outputs = model(features)
         loss = criterion(outputs, batch_labels)
         loss.backward()
+        
+        if config.GRADIENT_CLIP:
+            #gradient clipping
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        
         optimizer.step()
         
         running_loss += loss.item()
