@@ -25,6 +25,28 @@ from sentence_transformers import SentenceTransformer
 # # word2vec
 # #from gensim.models import Word2Vec
 # # url = "https://raw.githubusercontent.com/ataislucky/Data-Science/main/dataset/emotion_train.txt"
+        
+from sklearn.preprocessing import StandardScaler
+
+
+def extract_features_and_labels(dataloader):
+    all_features = []
+    all_labels = []
+    for features, labels in tqdm(dataloader, desc="Extracting features"):
+      # 만약 features가 3D (batch, sequence_length, feature_dim)라면 2D로 변환
+      if features.dim() == 3:
+          features = features.view(features.size(0), -1)
+      all_features.append(features.cpu().numpy())
+      all_labels.append(labels.cpu().numpy())
+      return np.vstack(all_features), np.concatenate(all_labels)
+
+def prep_data_for_benchmark(data_loader):
+    X, y= extract_features_and_labels(data_loader)
+    print(f"Shape of X_train: {X.shape}")
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    return X_scaled, y
 
 def convert_to_int_keys(dictionary):
     """
@@ -70,9 +92,11 @@ class TextDataset(Dataset):
         features = self.data[idx]
         label = self.labels[idx]
         return features, label
+    
 processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base")
 wav2vec2_model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base")
-wav2vec2_model.gradient_checkpointing_enable()
+#wav2vec2_model.gradient_checkpointing_enable()
+
 
 def download_ravdess(config):
     url = "https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1"
@@ -190,19 +214,32 @@ def print_label_distribution(labels, dataset_name="Dataset"):
     for label, count in counter.items():
         print(f"Label {label}: {count} samples ({count / total:.2%})")
 
-def combine_labels(labels, combine_indices, class_info):
-    new_labels = labels.copy()
-    updated_class_info = class_info.copy()
-    
-    for indices in combine_indices:
-        primary_index = indices[0]
-        for idx in indices:
-            if idx in updated_class_info:
-                del updated_class_info[idx]
-            new_labels[labels == idx] = primary_index
-        updated_class_info[primary_index] = f"Combined class {indices}"
-    
-    return new_labels, updated_class_info
+def combine_labels(config, class_info, labels, combine_indices):
+    keys_to_merge = sorted(set(combine_indices))
+    new_dict = {}
+    for key in class_info:
+        if key in keys_to_merge:
+            min_key = min(k for k in keys_to_merge if k in class_info)
+            merged_value = '_'.join(class_info[k] for k in keys_to_merge if k in class_info)
+            new_dict[min_key] = merged_value
+        else:
+            new_dict[key] = class_info[key]
+
+    key_mapping = {k: min(keys_to_merge) for k in keys_to_merge}
+    new_labels = [key_mapping.get(x, x) for x in labels]
+
+    count_dict = {}
+    for num in new_labels:
+        if num in new_dict:
+            count_dict[num] = count_dict.get(num, 0) + 1
+
+    for key, count in count_dict.items():
+        print(f"{key}. {new_dict[key]}: {count}")
+        
+    config.LABELS_EMOTION = new_dict
+
+    return new_dict, new_labels
+
 
 def balance_classes(data, labels):
     unique_labels = np.unique(labels)

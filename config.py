@@ -4,18 +4,31 @@ import sys
 import datetime
 from collections import namedtuple
 
+
+# dropout
+# bath norm
+# optimizer adam
+# activation relu
+# early stop 5 epoch (loss)
+
+# scheduler at train_utils CosineAnnealingLR
+# torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 @dataclass
 class Config:
+    model_name: str = ''
+    early_stop_epoch: int = 10
     CUR_MODE: str ='' # current mode
     N_STEP_FIG: int = 2
     # General settings
     SEED: int = 2024
     NUM_EPOCHS: int = 5
-    
+    global_epoch:int = 0
+
     BATCH_SIZE: int = 32
     
     DROPOUT_RATE: float = 0.4
     lr: float = 0.0005
+    eta_min: float = 1e-4 
     weight_decay: float =1e-5
     
     # Model settings
@@ -23,7 +36,8 @@ class Config:
     ACTIVATION: str = "relu"
     OPTIMIZER: str = "adam"
     
-    max_iter: int = 10000 # for multi logistic reg
+    SCHEDULER: bool = True
+    GRADIENT_CLIP: bool = True
     
     history: dict = field(default_factory=lambda: {
         'train': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []},
@@ -54,14 +68,21 @@ class Config:
     METRIC_AVG='weighted'
     
     # Wandb settings
+    IS_RESUME: bool = False
     WANDB_PROJECT: str = field(init=False)
     ENTITY: str = "biasdrive-neuromatch"
     id_wandb: str = ""
+    sweep_id: str =""
     IS_SWEEP: bool = False
     SWEEP_NAIVE: bool =True
-    sweep_id: str =""
     N_SWEEP: int = 50
     
+    model_benchmark='svm'
+    C_val: float = 0.1
+    max_iter: int = 1000 # for multi logistic reg
+    solver: str = 'saga'
+    penalty: str = 'l1'
+    kernel: str = 'rbf'
     
     sweep_config = {
         'method': 'bayes',
@@ -81,7 +102,7 @@ class Config:
     "dataset": f"{DATA_NAME}",
     #"batch_size": BATCH_SIZE,
     "epochs": NUM_EPOCHS,
-    # "initial_epoch": initial_epoch,
+    "global_epoch": global_epoch,
     "batch_size": BATCH_SIZE,
     "model": MODEL,
     "lr": lr,
@@ -107,21 +128,35 @@ class Config:
         self.DATA_DIR = os.path.join(self.BASE_DIR, 'data')
         
         self.MODEL_BASE_DIR=os.path.join(self.BASE_DIR, 'models')
-        self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, f"{self.MODEL}_v1_{date_str}")
+        self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, f"{self.MODEL}")
         
         self.MODEL_SAVE_PATH = os.path.join(self.MODEL_DIR, f'best_model_{self.MODEL}.pth')
         self.CKPT_SAVE_PATH = os.path.join(self.MODEL_DIR, f'checkpoint_{self.MODEL}.pth')
-        
-        self.WANDB_PROJECT = f"{self.PROJECT_DIR}_{self.MODEL}_{date_str}"
-        
-        print(f'\n\n##### Current Project Location #####\n-Base Directory: {self.BASE_DIR}\n-Data: {self.DATA_DIR}\n-Models: {self.MODEL_BASE_DIR}\n-Current Model: {self.MODEL_DIR}\n-Current Model name: {self.MODEL_SAVE_PATH}\n\n')
-        
+        self.best_model_info_path = os.path.join(self.MODEL_BASE_DIR, 'best_model_info.txt')
+        #self.WANDB_PROJECT = f"{self.PROJECT_DIR}_{self.MODEL}"#_{date_str}"
+
+        print(f'\n\n##### Current Project Location #####\n-Base Directory: {self.BASE_DIR}\n-Data: {self.DATA_DIR}\n-Models: {self.MODEL_BASE_DIR}-Current Model: {self.MODEL_DIR}\n-Current Model name: {self.MODEL_SAVE_PATH}\n\nFigure will be saved per {self.N_STEP_FIG}-step\n')
         os.makedirs(self.BASE_DIR, exist_ok=True)
         os.makedirs(self.MODEL_BASE_DIR, exist_ok=True)
         os.makedirs(self.DATA_DIR, exist_ok=True)
         os.makedirs(self.MODEL_DIR, exist_ok=True)
         
+    # def __setattr__(self, name:str, value: any) -> None:
+    #     if hasattr(self, name):
+    #         old_value = getattr(self, name)
+    #         if old_value != value:
+    #             print(f"Updating {name}: {old_value} -> {value}")
+    #     super().__setattr__(name, value)
+    def print_variables(self):
+        for var, value in self.__dict__.items():
+            if not var.startswith("_"):  # 
+                print(f"{var}: {value}")
 
-    
+    def update(self, **kwargs):
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                print(f"Warning: {key} is not a valid config variable")
 
-config = Config()
+#config = Config()
