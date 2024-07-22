@@ -5,13 +5,13 @@ import re
 import torch
 import torch.nn as nn
 from config import Config
-from data_utils import load_data, prepare_dataloaders
+from data_utils import load_data, prepare_dataloaders, prep_audio, preprocess_data, preprocess_data_meld
 from models import list_models, chk_best_model_info, find_best_model, prep_model
 from train_utils import train_model, evaluate_model, load_checkpoint
 from evaluation import compare_models
 from visualization import visualize_results
 from hyperparameter_search import run_hyperparameter_sweep
-
+import pandas as pd
 def generate_unique_filename(filename):
     name, ext = os.path.splitext(filename)
     counter = 1
@@ -88,10 +88,10 @@ def main(args=None):
                 continue
             break
     
-    
     # Dataset
     
-    data, labels = load_data(config) 
+    data_dir = load_data(config) 
+    data, labels = preprocess_data(data_dir)
     train_loader, val_loader, test_loader = prepare_dataloaders(data, labels, config)
     
     # Best model info chk
@@ -121,8 +121,24 @@ def main(args=None):
             config.select_dataset = 'RAVDESS_speech'
         elif SELECT_DATA =='2':
             config.select_dataset ='MELD'
-        print(f'Dataset: {config.select_dataset} will be prepared.')
-        data, labels = load_data(config) 
+            config.TARGET=input("train or test dataset?")
+    
+            print(f'Dataset: {config.select_dataset} / {config.TARGET} will be prepared.\nSamples: {config.N_SAMPLE}')
+   
+        data_dir= load_data(config) 
+
+        if SELECT_DATA =='2':
+            label_info_df = pd.read_csv(f'https://raw.githubusercontent.com/declare-lab/MELD/master/data/MELD/{config.TARGET}_sent_emo.csv')
+            label_info_df = label_info_df.sample(config.N_SAMPLE, random_state=config.SEED, ignore_index=True)
+            data_meld_path=os.path.join(config.extracted_path, f'{config.TARGET}_audio')
+            if not os.path.exists(data_meld_path):
+                print('Audio extraction is needed.')
+                prep_audio(config, label_info_df, data_meld_path, config.TARGET)
+            else:
+                print('Audio extraction from MELD data is done.')
+            data, labels = preprocess_data_meld(data_meld_path, label_info_df)
+        else:
+            data, labels = preprocess_data(data_dir)
         train_loader, val_loader, test_loader = prepare_dataloaders(data, labels, config)
         
     elif args.mode == 'train':
@@ -152,7 +168,6 @@ def main(args=None):
         #### !! epoch +1 but not wanted?! -> model prep problem
         print('Model initialization...')
 
-        
         #model.apply(init_weights)
         history, best_val_loss, best_val_acc = train_model(model, train_loader, val_loader, config, device, optimizer, criterion)
         config.history=history

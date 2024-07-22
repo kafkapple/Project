@@ -80,16 +80,16 @@ def run_hyperparameter_sweep(config, train_loader, val_loader, model=None):
 
     def train():
         
-        # id_wandb=wandb.util.generate_id()
-        # #if not config.CUR_MODE == "benchmark":
-        # wandb.init(
-        # id=id_wandb,
-        # project=config.WANDB_PROJECT,
+        id_wandb=wandb.util.generate_id()
+        #if not config.CUR_MODE == "benchmark":
+        wandb.init(
+        id=id_wandb,
+        project=config.WANDB_PROJECT,
         
-        #     #name=config.WANDB_NAME, #
-        #     config=config.CONFIG_DEFAULTS,
-        #     resume=False
-        # )
+            #name=config.WANDB_NAME, #
+            config=config.CONFIG_DEFAULTS,
+            resume=False
+        )
         # else: # benchmark
             
         print('after init')
