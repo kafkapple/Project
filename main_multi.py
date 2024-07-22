@@ -30,7 +30,7 @@ from transformers import Wav2Vec2Processor, Wav2Vec2Model
 
 RANDOM_STATE = 2024
 # fetch file paths and labels for speech data
-def preprocess_data(data_dir, text_train_df):
+def preprocess_data_meld(data_dir, text_train_df):
     data = []
     labels = []
     for root, _, files in os.walk(data_dir):
@@ -47,7 +47,6 @@ def preprocess_data(data_dir, text_train_df):
     if len(data) == 0:
         raise ValueError("No valid .wav files found in the dataset.")
     return np.array(data), np.array(labels)
-
 # wav2vec
 
 # Import the Wav2Vec2Processor class from the transformers library using a pre-trained model
@@ -106,39 +105,88 @@ class SpeechDataset(Dataset):
         waveform, sample_rate = torchaudio.load(audio_path)
         features = extract_speech_features(waveform, sample_rate)
         return features, label
-def prep_audio(config, text_train_df, destination_base_path):
+
+def prep_audio(config, text_train_df, destination_base_path, TARGET):  # by Lek Hong
+    
     os.makedirs(destination_base_path, exist_ok=True)
+    
+    if TARGET == 'train':
+        TARGET_SPLIT = 'train_splits'
+    elif TARGET == 'test':
+        TARGET_SPLIT = 'output_repeated_splits_test'
+    else:
+        print('No target specified.')
+        return
+
     for dialogue_id, utterance_id in tqdm(zip(text_train_df["Dialogue_ID"], text_train_df["Utterance_ID"])):
-      # Source and destination paths
-        source_path = os.path.join(config.DATA_DIR, 'MELD.Raw',  'train','train_splits', f'dia{dialogue_id}_utt{utterance_id}.mp4')
-        destination_path = os.path.join(destination_base_path, f'dia{dialogue_id}_utt{utterance_id}.wav') #f'/content/drive/MyDrive/NMA/Upbeat-Tuberose-Poplar/data/raw/MELD_toy/    
+        # Source and destination paths
+        source_path = os.path.join(config.DATA_DIR, 'MELD', TARGET, TARGET_SPLIT, f'dia{dialogue_id}_utt{utterance_id}.mp4')
+        destination_path = os.path.join(destination_base_path, f'dia{dialogue_id}_utt{utterance_id}.wav')
+        
+        # Check if the destination audio file already exists
+        if os.path.exists(destination_path):
+            print(f"File {destination_path} already exists. Skipping...")
+            continue
 
-        #print(f'Source to Dest: {source_path} -> {destination_path}')
-        # Load the video file
-        video = mp.VideoFileClip(source_path)
+        try:
+            # Load the video file
+            video = mp.VideoFileClip(source_path)
 
-        # Extract the audio
-        audio = video.audio
+            # Extract the audio
+            audio = video.audio
 
-        # Save the audio file
-        audio.write_audiofile(destination_path)
-  
+            if audio is None:
+                print(f"Audio extraction failed for {source_path}. Skipping...")
+                video.close()
+                continue
+
+            # Write the audio to the destination path
+            audio.write_audiofile(destination_path)
+
+            # Close the video and audio objects to release resources
+            audio.close()
+            video.close()
+
+        except Exception as e:
+            print(f"Error processing {source_path}: {e}")
+            continue
+
+def data_prep(df, target, n_samples=0):
+    classes = df[target].unique()
+    n_class=len(classes)
+    df_c= df.copy()
+    print(f'Total number of class: {n_class} - {classes}')
+    if n_samples !=0:
+        n_samples_per_class = int(n_samples/n_class)
+        print(f'{n_samples} per class will be sampled')
+        df_c = df_c.groupby(target, group_keys=False).apply(lambda x: x.sample(n_samples_per_class))
+    print(f"\nCounts for {target} each classes:")
+    print(df_c[target].value_counts())
+    return df_c
+
+
 def main():
     config = Config()
     config.select_dataset = 'MELD'
     # ### Dataset
-    data_dir = load_data(config)#, config.dataset['MELD'])
+    # data_dir = load_data(config)#, config.dataset['MELD'])
     # # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_samples=1000
         # text data
-    text_train_df = pd.read_csv('https://raw.githubusercontent.com/declare-lab/MELD/master/data/MELD/train_sent_emo.csv')
-    text_train_df_toy = text_train_df.sample(n_samples, random_state=RANDOM_STATE, ignore_index=True)
+    df = pd.read_csv('https://raw.githubusercontent.com/declare-lab/MELD/master/data/MELD/train_sent_emo.csv')
+    
+    df_sampled = data_prep(df, 'Emotion', n_samples=n_samples)
+    df.to_csv(os.path.join(config.DATA_DIR, 'MELD_train.csv'))
+    df_sampled.to_csv(os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv'))
+    
     
     
 # save audio files corresponding to Dialogue_ID and Utterance_ID in text_train_df_toy
-    data_dir = os.path.join(config.DATA_DIR, 'MELD.Raw', 'train_audio')
+    data_dir = os.path.join(config.DATA_DIR, 'MELD', 'train_audio')
+    prep_audio(config, df_sampled, data_dir, 'train')
+    #data, labels = preprocess_data_meld(data_dir, df_sampled)
     
-    prep_audio(config, text_train_df_toy, data_dir)
+    
   # 2
     #speech_data, speech_labels = preprocess_data(data_dir, text_train_df_toy)
     #speech_dataset = SpeechDataset(speech_data, speech_labels)

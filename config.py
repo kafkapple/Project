@@ -16,9 +16,10 @@ from collections import namedtuple
 @dataclass
 class Config:
     N_SAMPLE=2000
-    dataset={"RAVDESS_speech": "https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1",
+    dataset={"RAVDESS": "https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1",
          "MELD": "https://huggingface.co/datasets/declare-lab/MELD/resolve/main/MELD.Raw.tar.gz"}
-    select_dataset = "RAVDESS_speech"
+    # select_dataset = "RAVDESS"
+    DATA_NAME= "MELD"#"RAVDESS"#_audio_speech"
     
     model_name: str = ''
     early_stop_epoch: int = 10
@@ -53,7 +54,12 @@ class Config:
     # Data settings
     RATIO_TRAIN: float = 0.7
     RATIO_TEST: float = 0.15
-    DATA_NAME= "RAVDESS_audio_speech"
+
+    LABELS_EMO_MELD: dict = field(default_factory=lambda: {
+        0: 'anger', 1: 'disgust', 2: 'fear', 3: 'joy',
+        4: 'neutral', 5: 'sadness', 6: 'surprise'
+    })
+    
     LABELS_EMOTION: dict = field(default_factory=lambda: {
         0: 'neutral', 1: 'calm', 2: 'happy', 3: 'sad',
         4: 'angry', 5: 'fearful', 6: 'disgust', 7: 'surprised'
@@ -136,10 +142,10 @@ class Config:
         self.DATA_DIR = os.path.join(self.BASE_DIR, 'data')
         
         self.MODEL_BASE_DIR=os.path.join(self.BASE_DIR, 'models')
-        self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, f"{self.MODEL}")
+        self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, f"{self.MODEL}_{self.DATA_NAME}")
         
-        self.MODEL_SAVE_PATH = os.path.join(self.MODEL_DIR, f'best_model_{self.MODEL}.pth')
-        self.CKPT_SAVE_PATH = os.path.join(self.MODEL_DIR, f'checkpoint_{self.MODEL}.pth')
+        self.MODEL_SAVE_PATH = os.path.join(self.MODEL_DIR, f'best_model_{self.MODEL}_{self.DATA_NAME}.pth')
+        self.CKPT_SAVE_PATH = os.path.join(self.MODEL_DIR, f'checkpoint_{self.MODEL}_{self.DATA_NAME}.pth')
         self.best_model_info_path = os.path.join(self.MODEL_BASE_DIR, 'best_model_info.txt')
         #self.WANDB_PROJECT = f"{self.PROJECT_DIR}_{self.MODEL}"#_{date_str}"
 
