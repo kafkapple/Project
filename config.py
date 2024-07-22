@@ -15,6 +15,10 @@ from collections import namedtuple
 # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 @dataclass
 class Config:
+    
+    dataset={"RAVDESS_speech": "https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1",
+         "MELD": "https://huggingface.co/datasets/declare-lab/MELD/resolve/main/MELD.Raw.tar.gz"}
+    select_dataset = "RAVDESS_speech"
     model_name: str = ''
     early_stop_epoch: int = 10
     CUR_MODE: str ='' # current mode
@@ -36,8 +40,9 @@ class Config:
     ACTIVATION: str = "relu"
     OPTIMIZER: str = "adam"
     
-    SCHEDULER: bool = True
-    GRADIENT_CLIP: bool = True
+    BOOL = True
+    SCHEDULER: bool = BOOL
+    GRADIENT_CLIP: bool = BOOL
     
     history: dict = field(default_factory=lambda: {
         'train': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []},
