@@ -90,8 +90,20 @@ def main(args=None):
     
     # Dataset
     
-    data_dir = load_data(config) 
-    data, labels = preprocess_data(data_dir)
+    #data_dir = load_data(config) 
+    data_dir = os.path.join(config.DATA_DIR, config.DATA_NAME)
+    #extracted_path = os.path.join(config.DATA_DIR, f"{config.DATA_NAME}.Raw")
+    if config.DATA_NAME=="MELD":
+        text_train_df= pd.read_csv(os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv'))
+        data, labels = preprocess_data_meld(data_dir, text_train_df)
+        dict_label = {v: k for k, v in config.LABELS_EMO_MELD.items()} 
+        labels=[dict_label[val] for val in labels]
+    elif config.DATA_NAME=='RAVDESS':
+        data, labels = preprocess_data(data_dir)
+    else:
+        print('err data')
+    
+    
     train_loader, val_loader, test_loader = prepare_dataloaders(data, labels, config)
     
     # Best model info chk
@@ -118,12 +130,12 @@ def main(args=None):
     if args.mode =='prep_data':
         SELECT_DATA = input("Select dataset type\n1. Audio dataset (RAVDESS Speech)\n2. Multi-modal dataset (MELD)\n")
         if SELECT_DATA =='1':
-            config.select_dataset = 'RAVDESS_speech'
+            config.DATA_NAME = 'RAVDESS'
         elif SELECT_DATA =='2':
-            config.select_dataset ='MELD'
+            config.DATA_NAME ='MELD'
             config.TARGET=input("train or test dataset?")
     
-            print(f'Dataset: {config.select_dataset} / {config.TARGET} will be prepared.\nSamples: {config.N_SAMPLE}')
+            print(f'Dataset: {config.DATA_NAME} / {config.TARGET} will be prepared.\nSamples: {config.N_SAMPLE}')
    
         data_dir= load_data(config) 
 

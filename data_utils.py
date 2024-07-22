@@ -210,19 +210,19 @@ wav2vec2_model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base")
 
 def download_dataset(config):
     
-    url = config.dataset[config.select_dataset]#"https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1"
-    if config.select_dataset == 'RAVDESS_speech':
+    url = config.dataset[config.DATA_NAME]#"https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1"
+    if config.DATA_NAME == 'RAVDESS':
         dataset_ext = 'zip'
-        extracted_path = os.path.join(config.DATA_DIR, config.select_dataset)
+        extracted_path = os.path.join(config.DATA_DIR, config.DATA_NAME)
                                       
-    elif config.select_dataset == 'MELD':
+    elif config.DATA_NAME == 'MELD':
         dataset_ext = 'tar.gz'
-        extracted_path = os.path.join(config.DATA_DIR, f"{config.select_dataset}.Raw")
+        extracted_path = os.path.join(config.DATA_DIR, f"{config.DATA_NAME}.Raw")
     dataset_path= extracted_path + '.'+dataset_ext
     print('Extraction path: ', extracted_path, dataset_path)
     config.extracted_path=extracted_path
 
-    print(f'Dataset: {config.select_dataset}')
+    print(f'Dataset: {config.DATA_NAME}')
     if not os.path.exists(dataset_path):
         print("Downloading dataset...")
         response = requests.get(url, stream=True)
@@ -260,7 +260,7 @@ def download_dataset(config):
     else:
         print("Dataset already extracted.\n")
         
-    if config.select_dataset=='MELD' and not os.path.exists(os.path.join(extracted_path, f'{TARGET}')):
+    if config.DATA_NAME=='MELD' and not os.path.exists(os.path.join(extracted_path, f'{TARGET}')):
         print('######### MELD')
         try:
             path_tar2=os.path.join(extracted_path, f'{TARGET}.tar.gz')
@@ -279,6 +279,7 @@ def download_dataset(config):
 def preprocess_data_meld(data_dir, text_train_df):
     data = []
     labels = []
+    count=0
     for root, _, files in os.walk(data_dir):
         for file in files:
             if file.endswith(".wav"):
@@ -287,8 +288,13 @@ def preprocess_data_meld(data_dir, text_train_df):
 
                 dialogue_id = int(file.split("_")[0][3:])
                 utterance_id = int(file.split("_")[1].split(".")[0][3:])
-                label = text_train_df.loc[(text_train_df["Dialogue_ID"]==dialogue_id) & (text_train_df["Utterance_ID"]==utterance_id), "Emotion"].item()
-                labels.append(label)
+                try:
+                    label = text_train_df.loc[(text_train_df["Dialogue_ID"]==dialogue_id) & (text_train_df["Utterance_ID"]==utterance_id), "Emotion"].item()
+                    labels.append(label)
+                except:
+                    print('No file or err')
+                    count+=1
+    print('Total err: ', count)
 
     if len(data) == 0:
         raise ValueError("No valid .wav files found in the dataset.")
@@ -320,7 +326,7 @@ def extract_features(waveform, sample_rate):
     wav2vec2_features = outputs.last_hidden_state.squeeze(0).mean(dim=0).numpy()
     return wav2vec2_features.reshape(1, -1)  # reshape (1, input_size) 
 
-class RAVDESSTorchDataset(Dataset):
+class AudioDataset(Dataset):
     def __init__(self, data, labels):
         self.data = data
         self.labels = labels
@@ -348,7 +354,7 @@ def prepare_dataloaders(data, labels, config, combine_indices=None, balance=Fals
     if balance:
         data, labels = balance_classes(data, labels)
     
-    full_dataset = RAVDESSTorchDataset(data, labels)
+    full_dataset = AudioDataset(data, labels)
     
     train_size = int(config.RATIO_TRAIN * len(full_dataset))
     val_size = int(config.RATIO_TEST * len(full_dataset))
