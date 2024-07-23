@@ -99,10 +99,10 @@ num_epochs = 20
 lr=1e-3
 n_batch = 4 # 74% GPU. 8 is danger high n_batch -> small batch size -> low gpu?
 n_labels = len(config.LABELS_EMO_MELD)
-wav2vec_path = "./wav2vec2_finetuned"  # 파인튜닝된 wav2vec2 모델 경로
-# Model 
-# model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
-# config
+
+wav2vec_path = ".models/wav2vec2_finetuned"  # 파인튜닝된 wav2vec2 모델 경로
+wav2vec_path="facebook/wav2vec2-base"
+
 
 data_dir=os.path.join(config.DATA_DIR, 'MELD.Raw', 'train_audio')
 label_dir=os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv')
@@ -112,16 +112,13 @@ label_info_df= pd.read_csv(label_dir)
 print(f'Data location: {data_dir}\nlabel info: {label_dir}')
 
 # Data prep
-file_paths, labels = preprocess_data_meld(data_dir, label_info_df)#preprocess_data(data_dir)
-#print(type(file_paths), type(file_paths[0]))
+file_paths, labels = preprocess_data_meld(data_dir, label_info_df)
 
 dict_label = {v: k for k, v in config.LABELS_EMO_MELD.items()} 
 labels=[dict_label[val] for val in labels]
 config.LABELS_EMOTION =config.LABELS_EMO_MELD
 
 dataset = AudioDataset(file_paths, labels)
-
-# dataloader = DataLoader(dataset, batch_size=n_batch, shuffle=True, collate_fn=collate_fn)
 
 # 데이터셋 분할
 train_size = int(0.8 * len(dataset))
@@ -131,55 +128,13 @@ train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 train_dataloader = DataLoader(train_dataset, batch_size=n_batch, shuffle=True, collate_fn=collate_fn)
 val_dataloader = DataLoader(val_dataset, batch_size=n_batch, shuffle=False, collate_fn=collate_fn)
 
-# Test
-# first_item = dataset[0]
-# print("First item audio type:", type(first_item['audio']))
-# print("First item audio shape:", first_item['audio'].shape)
-# print("First item label:", first_item['label'])
-
-# test_batch = [dataset[i] for i in range(4)]  
-# collated = collate_fn(test_batch)
-# print("Collated audio shape:", collated['audio'].shape)
-# print("Collated labels:", collated['label'])
-
-model = Wav2Vec2ForSequenceClassification.from_pretrained("facebook/wav2vec2-base", num_labels=n_labels)
-# Fine-tuning
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # model.to(device)
-model = Wav2Vec2ForSequenceClassification.from_pretrained("facebook/wav2vec2-base", num_labels=n_labels)
+model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
 model.to(device)
-# optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
-# criterion = nn.CrossEntropyLoss()
-
-# # 10 epoch 1e-5
-# num_epochs = 20
-# for epoch in tqdm(range(num_epochs)):
-  
-#     # train_loss, train_acc, train_f1 = train_epoch(model, dataloader, optimizer, criterion, device)
-#     model.train()
-#     total_loss = 0
-#     for batch in dataloader:
-#         audio_input = batch['audio'].to(device)
-#         labels = batch['label'].to(device)
-
-#         outputs = model(audio_input)
-#         loss = criterion(outputs.logits, labels)
-
-#         loss.backward()
-#         optimizer.step()
-#         optimizer.zero_grad()
-#         total_loss+=loss.item()
-#         #val_loss, val_acc, val_f1 = validate(model, val_dataloader, criterion, device)
-#     avg_loss = total_loss / len(dataloader)
-#     print(f"Epoch {epoch+1}/{num_epochs}: {avg_loss}")
-    #print(f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Train F1: {train_f1:.4f}")
-    # print(f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Val F1: {val_f1:.4f}")
-    #print("-" * 50)
 
 # Fine-tuning 및 성능 기록
-
-
 optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 criterion = nn.CrossEntropyLoss()
 
