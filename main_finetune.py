@@ -57,7 +57,7 @@ def collate_fn(batch):
 # config
 config=Config()
 print(config)
-data_dir=os.path.join(config.DATA_DIR, 'MELD.Raw', 'train_audio')
+data_dir=os.path.join(config.DATA_DIR, 'MELD', 'train_audio')
 label_dir=os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv')
 # load class label info
 label_info_df= pd.read_csv(label_dir)
@@ -89,7 +89,7 @@ n_labels = len(config.LABELS_EMO_MELD)
 dataloader = DataLoader(dataset, batch_size=n_batch, shuffle=True, collate_fn=collate_fn)
 
 
-wav2vec_path = "./wav2vec2_finetuned_2"  # 파인튜닝된 wav2vec2 모델 경로
+wav2vec_path = "./wav2vec2_finetuned"  # 파인튜닝된 wav2vec2 모델 경로
 # Model 
 model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
 
@@ -99,7 +99,7 @@ model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labe
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 criterion = nn.CrossEntropyLoss()
 
 # 10 epoch 1e-5
