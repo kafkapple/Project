@@ -180,21 +180,18 @@ for epoch in tqdm(range(num_epochs)):
     # 최고 성능 모델 저장
     if val_f1 > best_val_f1:
         best_val_f1 = val_f1
-        model.save_pretrained(f"./wav2vec2_finetuned_best")
+        model.save_pretrained(f"./models/wav2vec2_finetuned_best")
     
     # 주기적으로 모델 저장 (예: 5 에폭마다)
     if (epoch + 1) % 5 == 0:
-        model.save_pretrained(f"./wav2vec2_finetuned_epoch_{epoch+1}")
+        model.save_pretrained(f"./models/wav2vec2_finetuned_epoch_{epoch+1}")
 
 # 최종 모델 저장
-model.save_pretrained("./wav2vec2_finetuned_final")
+model.save_pretrained("./models/wav2vec2_finetuned_final")
 
 # 학습 로그 저장
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 save_log(log_data, f"training_log_{timestamp}.json")
-
-
-model.save_pretrained("./wav2vec2_finetuned_2")
 
 gc.collect()
 torch.cuda.empty_cache()
