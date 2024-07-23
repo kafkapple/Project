@@ -16,7 +16,7 @@ from collections import namedtuple
 @dataclass
 class Config:
     
-    path_best=''
+    path_best="facebook/wav2vec2-base"
     device=''
     N_SAMPLE=500
     
