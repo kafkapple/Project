@@ -5,6 +5,7 @@
 /data
 /models
 /wandb
+/wav2vec2_finetuned
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -18,10 +18,8 @@ from tqdm import tqdm
 
 import gc
 
-
 gc.collect()
 torch.cuda.empty_cache()
-
 
 def load_and_preprocess_audio(file_path, max_length=80000): # max num of audio is fixed (5 sec)
     waveform, sample_rate = torchaudio.load(str(file_path))
@@ -64,7 +62,6 @@ label_dir=os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv')
 # load class label info
 label_info_df= pd.read_csv(label_dir)
 
-
 print(f'Data location: {data_dir}\nlabel info: {label_dir}')
 
 # Data prep
@@ -91,8 +88,12 @@ n_batch = 4 # 74% GPU. 8 is danger high n_batch -> small batch size -> low gpu?
 n_labels = len(config.LABELS_EMO_MELD)
 dataloader = DataLoader(dataset, batch_size=n_batch, shuffle=True, collate_fn=collate_fn)
 
+
+wav2vec_path = "./wav2vec2_finetuned_2"  # 파인튜닝된 wav2vec2 모델 경로
 # Model 
-model = Wav2Vec2ForSequenceClassification.from_pretrained("facebook/wav2vec2-base", num_labels=n_labels)
+model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
+
+#model = Wav2Vec2ForSequenceClassification.from_pretrained("facebook/wav2vec2-base", num_labels=n_labels)
 # Fine-tuning
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -101,6 +102,7 @@ model.to(device)
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
 criterion = nn.CrossEntropyLoss()
 
+# 10 epoch 1e-5
 num_epochs = 10
 for epoch in tqdm(range(num_epochs)):
   
@@ -125,6 +127,6 @@ for epoch in tqdm(range(num_epochs)):
     # print(f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Val F1: {val_f1:.4f}")
     #print("-" * 50)
 
-model.save_pretrained("./wav2vec2_emotion_model")
+model.save_pretrained("./wav2vec2_emotion_model_2")
 gc.collect()
 torch.cuda.empty_cache()
