@@ -21,8 +21,6 @@ def save_and_log_figure(stage, fig, config, name, title):
     fig.savefig(os.path.join(path, f"{name}_{config.global_epoch}.png"))
     wandb.log({f"{stage}":{f"{name}": wandb.Image(fig, caption=title)}}, step=config.global_epoch)
     
-    
-
 def visualize_results(config, model, data_loader, device, log_data, stage):
     print('\nVisualization of results starts.\n')
     if stage in ['train', 'val'] and log_data:
