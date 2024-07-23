@@ -18,8 +18,6 @@ from tqdm import tqdm
 
 import gc
 
-gc.collect()
-torch.cuda.empty_cache()
 
 import torch
 from torch.utils.data import random_split
@@ -27,8 +25,15 @@ from sklearn.metrics import accuracy_score, f1_score
 import numpy as np
 import json
 from datetime import datetime
+import wandb
 
+from visualization import visualize_results
+from train_utils import log_metrics
 # 성능 평가 함수
+
+gc.collect()
+torch.cuda.empty_cache()
+
 def evaluate(model, dataloader, criterion, device):
     model.eval()
     total_loss = 0
@@ -93,16 +98,35 @@ def collate_fn(batch):
     labels = torch.tensor([item['label'] for item in batch], dtype=torch.long)
     return {"audio": audio, "label": labels}
 
+# 2. Classifier (MLP) 추가 및 전체 모델 학습
+
+class Wav2Vec2ClassifierModel(nn.Module):
+    def __init__(self, num_labels, dropout=0.1):
+        super().__init__()
+        self.wav2vec2 = Wav2Vec2Model.from_pretrained("./wav2vec2_finetuned_best")
+        self.classifier = nn.Sequential(
+            nn.Linear(768, 256),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(256, num_labels)
+        )
+        
+    def forward(self, input_values):
+        outputs = self.wav2vec2(input_values)
+        hidden_states = outputs.last_hidden_state
+        pooled_output = torch.mean(hidden_states, dim=1)
+        return self.classifier(pooled_output)
+
+
 config=Config()
 
 num_epochs = 20
-lr=1e-3
+lr=1e-4
 n_batch = 4 # 74% GPU. 8 is danger high n_batch -> small batch size -> low gpu?
 n_labels = len(config.LABELS_EMO_MELD)
 
 wav2vec_path = ".models/wav2vec2_finetuned"  # 파인튜닝된 wav2vec2 모델 경로
 wav2vec_path="facebook/wav2vec2-base"
-
 
 data_dir=os.path.join(config.DATA_DIR, 'MELD.Raw', 'train_audio')
 label_dir=os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv')
@@ -140,6 +164,17 @@ criterion = nn.CrossEntropyLoss()
 
 best_val_f1 = 0
 log_data = {'train': [], 'val': []}
+history = {
+        'train': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []},
+        'val': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []}
+    }
+
+# wandb log
+config.WANDB_PROJECT='wav2vec_fine_tune'
+id_wandb = wandb.util.generate_id()
+print(f'Wandb id generated: {id_wandb}')
+config.id_wandb = id_wandb
+wandb.init(id=id_wandb, project=config.WANDB_PROJECT)#, config=config.CONFIG_DEFAULTS)
 
 for epoch in tqdm(range(num_epochs)):
     model.train()
@@ -161,6 +196,7 @@ for epoch in tqdm(range(num_epochs)):
     # Validation
     val_loss, val_accuracy, val_f1 = evaluate(model, val_dataloader, criterion, device)
     
+    
     print(f"Epoch {epoch+1}/{num_epochs}:")
     print(f"Train Loss: {avg_train_loss:.4f}")
     print(f"Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.4f}, Val F1: {val_f1:.4f}")
@@ -176,6 +212,11 @@ for epoch in tqdm(range(num_epochs)):
         'accuracy': val_accuracy,
         'f1': val_f1
     })
+    
+    config.global_epoch=epoch+1
+    visualize_results(config, model, val_dataloader, device, log_data['val'], 'val')
+    log_metrics('train', log_data['train'], config.global_epoch)
+    log_metrics('val', log_data['val'], config.global_epoch)
     
     # 최고 성능 모델 저장
     if val_f1 > best_val_f1:
@@ -195,5 +236,17 @@ save_log(log_data, f"training_log_{timestamp}.json")
 
 gc.collect()
 torch.cuda.empty_cache()
+wandb.finishi()
 
 
+####
+
+# 새 모델 초기화
+new_model = Wav2Vec2ClassifierModel(num_labels=n_labels)
+new_model.to(device)
+
+# 학습 설정
+optimizer = torch.optim.AdamW(new_model.parameters(), lr=5e-5)
+criterion = nn.CrossEntropyLoss()
+num_epochs = 20
+best_val_f1 = 0

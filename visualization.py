@@ -24,21 +24,24 @@ def visualize_results(config, model, data_loader, device, history, stage):
     print('\nVisualization of results starts.\n')
     if stage in ['train', 'val'] and history:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-        epochs = range(1, len(history[stage]['loss']) + 1)
-        
-        ax1.plot(epochs, history[stage]['loss'], 'bo-')
-        ax1.set_title(f'{stage.capitalize()} Loss')
-        ax1.set_xlabel('Epochs')
-        ax1.set_ylabel('Loss')
-        
-        ax2.plot(epochs, history[stage]['accuracy'], 'ro-')
-        ax2.set_title(f'{stage.capitalize()} Accuracy')
-        ax2.set_xlabel('Epochs')
-        ax2.set_ylabel('Accuracy')
-        
-        #plt.tight_layout()
-        save_and_log_figure(stage, fig, config, "learning_curves", f"{stage.capitalize()} Learning Curves")
-        plt.close(fig)
+        try:
+            epochs = range(1, len(history[stage]['loss']) + 1)
+            
+            ax1.plot(epochs, history[stage]['loss'], 'bo-')
+            ax1.set_title(f'{stage.capitalize()} Loss')
+            ax1.set_xlabel('Epochs')
+            ax1.set_ylabel('Loss')
+            
+            ax2.plot(epochs, history[stage]['accuracy'], 'ro-')
+            ax2.set_title(f'{stage.capitalize()} Accuracy')
+            ax2.set_xlabel('Epochs')
+            ax2.set_ylabel('Accuracy')
+            
+            #plt.tight_layout()
+            save_and_log_figure(stage, fig, config, "learning_curves", f"{stage.capitalize()} Learning Curves")
+            plt.close(fig)
+        except:
+            print('Err. no learning curve.')
 
     # Confusion Matrix and Embeddings visualization for all stages
     model.eval()

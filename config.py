@@ -15,6 +15,9 @@ from collections import namedtuple
 # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 @dataclass
 class Config:
+    
+    path_best=''
+    device=''
     N_SAMPLE=500
     
     dataset={"RAVDESS": "https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1",
