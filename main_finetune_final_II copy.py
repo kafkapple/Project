@@ -12,7 +12,7 @@ from datetime import datetime
 import wandb
 import gc
 
-from transformers import Wav2Vec2Model
+from transformers import Wav2Vec2Model, Wav2Vec2ForSequenceClassification
 from config import Config
 from data_utils import preprocess_data_meld
 from visualization import visualize_results
@@ -193,29 +193,36 @@ class Wav2Vec2ClassifierModel(nn.Module):
         pooled_output = torch.mean(hidden_states, dim=1)
         return {'last_hidden_state': hidden_states, 'logits': self.classifier(pooled_output)}
 
-config = Config()
+
+### 
+config=Config()
 num_epochs = 30
-config.NUM_EPOCHS = num_epochs
-n_batch = 4
-config.BATCH_SIZE = n_batch
+config.NUM_EPOCHS=num_epochs
+#lr=1e-4
+n_batch = 4 # 74% GPU. 8 is danger high n_batch -> small batch size -> low gpu?
+config.BATCH_SIZE=n_batch
 n_labels = len(config.LABELS_EMO_MELD)
 
-wav2vec_path = "facebook/wav2vec2-base"
+#wav2vec_path = ".models/wav2vec2_finetuned"  # 파인튜닝된 wav2vec2 모델 경로
+wav2vec_path="facebook/wav2vec2-base"
 
-data_dir = os.path.join(config.DATA_DIR, 'MELD', 'train_audio')
-label_dir = os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv')
-label_info_df = pd.read_csv(label_dir)
+data_dir=os.path.join(config.DATA_DIR, 'MELD', 'train_audio')
+label_dir=os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv')
+# load class label info
+label_info_df= pd.read_csv(label_dir)
 
 print(f'Data location: {data_dir}\nlabel info: {label_dir}')
 
+# Data prep
 file_paths, labels = preprocess_data_meld(data_dir, label_info_df)
 
 dict_label = {v: k for k, v in config.LABELS_EMO_MELD.items()} 
-labels = [dict_label[val] for val in labels]
-config.LABELS_EMOTION = config.LABELS_EMO_MELD
+labels=[dict_label[val] for val in labels]
+config.LABELS_EMOTION =config.LABELS_EMO_MELD
 
 dataset = AudioDataset(file_paths, labels)
 
+# 데이터셋 분할
 train_size = int(0.8 * len(dataset))
 val_size = len(dataset) - train_size
 train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
@@ -224,7 +231,40 @@ train_dataloader = DataLoader(train_dataset, batch_size=n_batch, shuffle=True, c
 val_dataloader = DataLoader(val_dataset, batch_size=n_batch, shuffle=False, collate_fn=collate_fn)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# model.to(device)
 config.device = device
+
+###### I.
+# Fine-tuning 및 성능 기록
+config.model_name= 'wav2vec_I'
+model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
+model.to(device)
+config.lr =1e-4
+# wandb log
+config.WANDB_PROJECT='wav2vec_I_fine_tune'
+config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
+os.makedirs(config.MODEL_DIR, exist_ok=True)
+
+config_wandb = {'lr': config.lr,
+                'n_batch': n_batch
+                }
+id_wandb = wandb.util.generate_id()
+print(f'Wandb id generated: {id_wandb}')
+config.id_wandb = id_wandb
+wandb.init(id=id_wandb, project=config.WANDB_PROJECT)#, config=config.CONFIG_DEFAULTS)
+
+model, log_data = train(model, train_dataloader, val_dataloader, config)
+# 최종 모델 저장
+model.save_pretrained(os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
+
+# 학습 로그 저장
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+save_log(log_data, f"training_log_{timestamp}.json")
+
+gc.collect()
+torch.cuda.empty_cache()
+wandb.finish()
+
 
 config.NUM_EPOCHS = 60
 config.model_name = 'wav2vec_II'

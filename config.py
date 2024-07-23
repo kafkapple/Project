@@ -37,7 +37,7 @@ class Config:
     model_name: str = ''
     early_stop_epoch: int = 100
     CUR_MODE: str ='' # current mode
-    N_STEP_FIG: int = 2
+    N_STEP_FIG: int = 5
     # General settings
     SEED: int = 2024
     NUM_EPOCHS: int = 5
