@@ -36,9 +36,15 @@ def load_model(model, path):
         return model
 def get_logits_from_output(outputs):
     if isinstance(outputs, dict):
-        return outputs['logits']
-    else:
+        return outputs.get('logits', outputs.get('last_hidden_state'))
+    elif isinstance(outputs, torch.Tensor):
+        return outputs  # 이미 로짓 텐서인 경우
+    elif hasattr(outputs, 'logits'):
         return outputs.logits
+    elif hasattr(outputs, 'last_hidden_state'):
+        return outputs.last_hidden_state
+    else:
+        raise ValueError("Unexpected output format from the model")
 def evaluate(model, dataloader, criterion, device):
     model.eval()
     total_loss = 0
@@ -51,6 +57,7 @@ def evaluate(model, dataloader, criterion, device):
             labels = batch['label'].to(device)
             
             outputs = model(audio_input)
+            print(type(outputs), outputs)
             logits = get_logits_from_output(outputs)  # 변경된 부분
             
             loss = criterion(logits, labels)
@@ -210,7 +217,7 @@ class Wav2Vec2ClassifierModel(nn.Module):
         hidden_states = outputs.last_hidden_state
         pooled_output = torch.mean(hidden_states, dim=1)
         logits = self.classifier(pooled_output)
-        return logits
+        return logits  # 직접 logits를 반환
 
 ### 
 config=Config()
@@ -252,41 +259,43 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # model.to(device)
 config.device = device
 
-# ###### I.
-# # Fine-tuning 및 성능 기록
-# config.model_name= 'wav2vec_I'
-# model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
-# model.to(device)
-# config.lr =1e-4
-# # wandb log
-# config.WANDB_PROJECT='wav2vec_I_fine_tune'
-# config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
-# os.makedirs(config.MODEL_DIR, exist_ok=True)
+###### I.
+# Fine-tuning 및 성능 기록
+config.model_name= 'wav2vec_I'
+model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
+model.to(device)
+config.lr =1e-4
+# wandb log
+config.WANDB_PROJECT='wav2vec_I_fine_tune'
+config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
+os.makedirs(config.MODEL_DIR, exist_ok=True)
 
-# config_wandb = {'lr': config.lr,
-#                 'n_batch': n_batch
-#                 }
-# id_wandb = wandb.util.generate_id()
-# print(f'Wandb id generated: {id_wandb}')
-# config.id_wandb = id_wandb
-# wandb.init(id=id_wandb, project=config.WANDB_PROJECT)#, config=config.CONFIG_DEFAULTS)
+config_wandb = {'lr': config.lr,
+                'n_batch': n_batch
+                }
+id_wandb = wandb.util.generate_id()
+print(f'Wandb id generated: {id_wandb}')
+config.id_wandb = id_wandb
+wandb.init(id=id_wandb, project=config.WANDB_PROJECT)#, config=config.CONFIG_DEFAULTS)
 
-# model, log_data = train(model, train_dataloader, val_dataloader, config)
-# # 최종 모델 저장
-# try:
-#     model.save_pretrained(os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
-# except:
-#     torch.save(model.state_dict(), os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
+model, log_data = train(model, train_dataloader, val_dataloader, config)
+# 최종 모델 저장
+new_path=os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
+os.makedirs(new_path, exist_ok=True)
+try:
+    save_model(model, new_path)
+    #model.save_pretrained(os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
+except:
+    print('save err')
+    # torch.save(model.state_dict(), os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
 
+# 학습 로그 저장
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+save_log(log_data, f"training_log_{timestamp}.json")
 
-# # 학습 로그 저장
-# timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-# save_log(log_data, f"training_log_{timestamp}.json")
-
-# gc.collect()
-# torch.cuda.empty_cache()
-# wandb.finish()
-
+gc.collect()
+torch.cuda.empty_cache()
+wandb.finish()
 
 config.NUM_EPOCHS = 60
 config.model_name = 'wav2vec_II'
@@ -294,7 +303,7 @@ config.lr = 5e-5
 config.DROPOUT_RATE = 0.4
 
 # for temp
-config.path_best = os.path.join(config.MODEL_BASE_DIR, 'wav2vec2_finetuned')
+#config.path_best = os.path.join(config.MODEL_BASE_DIR, 'wav2vec2_finetuned')
 print(config.path_best)
 new_model = Wav2Vec2ClassifierModel(config, num_labels=n_labels, dropout=config.DROPOUT_RATE)
 new_model.to(device)

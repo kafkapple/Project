@@ -11,6 +11,18 @@ import pandas as pd
 from tqdm import tqdm
 import os
 
+def get_logits_from_output(outputs):
+    if isinstance(outputs, dict):
+        return outputs.get('logits', outputs.get('last_hidden_state'))
+    elif isinstance(outputs, torch.Tensor):
+        return outputs  # 이미 로짓 텐서인 경우
+    elif hasattr(outputs, 'logits'):
+        return outputs.logits
+    elif hasattr(outputs, 'last_hidden_state'):
+        return outputs.last_hidden_state
+    else:
+        raise ValueError("Unexpected output format from the model")
+
 # def visualize_metric(model, data_loader):
 #     fig = plot_confusion_matrix(all_labels, all_preds, config.LABELS_EMOTION)
     
@@ -54,9 +66,12 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
     with torch.no_grad():
         for batch in tqdm(data_loader, desc="Preparing data for Visualizing..."):
             inputs = batch['audio'].to(device)
-            labels = batch['label']
+            labels = batch['label'].to(device)
             outputs = model(inputs)
-            _, preds = torch.max(outputs.logits, 1)
+            logits = get_logits_from_output(outputs)
+            _, preds = torch.max(logits, 1) 
+            #_, preds = torch.max(outputs.logits, 1)
+            
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.numpy())
             all_embeddings.extend(outputs.logits.cpu().numpy())
