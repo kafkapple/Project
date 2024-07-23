@@ -92,7 +92,7 @@ class Config:
     
     # Wandb settings
     IS_RESUME: bool = False
-    WANDB_PROJECT: str = field(init=False)
+    WANDB_PROJECT: str = ''#field(init=False)
     ENTITY: str = "biasdrive-neuromatch"
     id_wandb: str = ""
     sweep_id: str =""
