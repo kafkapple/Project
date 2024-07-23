@@ -34,9 +34,7 @@ def evaluate(model, dataloader, criterion, device):
             labels = batch['label'].to(device)
             
             outputs = model(audio_input)
-            hidden_states = outputs['last_hidden_state']
-            pooled_output = torch.mean(hidden_states, dim=1)
-            logits = model.classifier(pooled_output)
+            logits = outputs.logits  # 변경된 부분
             
             loss = criterion(logits, labels)
             total_loss += loss.item()
@@ -50,7 +48,6 @@ def evaluate(model, dataloader, criterion, device):
     f1 = f1_score(all_labels, all_preds, average='weighted')
     
     return avg_loss, accuracy, f1
-
 def save_log(log_data, filename):
     with open(filename, 'w') as f:
         json.dump(log_data, f, indent=4)
@@ -115,7 +112,7 @@ def train(model, train_dataloader, val_dataloader, config):
             labels = batch['label'].to(device)
 
             outputs = model(audio_input)
-            logits = outputs['logits']
+            logits = outputs.logits#['logits']
             loss = criterion(logits, labels)
             
             loss.backward()
@@ -235,47 +232,53 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 config.device = device
 
 # ###### I.
-# # Fine-tuning 및 성능 기록
-# config.model_name= 'wav2vec_I'
-# model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
-# model.to(device)
-# config.lr =1e-4
-# # wandb log
-# config.WANDB_PROJECT='wav2vec_I_fine_tune'
-# config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
-# os.makedirs(config.MODEL_DIR, exist_ok=True)
+# Fine-tuning 및 성능 기록
+config.model_name= 'wav2vec_I'
+model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
+model.to(device)
+config.lr =1e-4
+# wandb log
+config.WANDB_PROJECT='wav2vec_I_fine_tune'
+config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
+os.makedirs(config.MODEL_DIR, exist_ok=True)
 
-# config_wandb = {'lr': config.lr,
-#                 'n_batch': n_batch
-#                 }
-# id_wandb = wandb.util.generate_id()
-# print(f'Wandb id generated: {id_wandb}')
-# config.id_wandb = id_wandb
-# wandb.init(id=id_wandb, project=config.WANDB_PROJECT)#, config=config.CONFIG_DEFAULTS)
+config_wandb = {'lr': config.lr,
+                'n_batch': n_batch
+                }
+id_wandb = wandb.util.generate_id()
+print(f'Wandb id generated: {id_wandb}')
+config.id_wandb = id_wandb
+wandb.init(id=id_wandb, project=config.WANDB_PROJECT)#, config=config.CONFIG_DEFAULTS)
 
-# model, log_data = train(model, train_dataloader, val_dataloader, config)
-# # 최종 모델 저장
-# model.save_pretrained(os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
+model, log_data = train(model, train_dataloader, val_dataloader, config)
+# 최종 모델 저장
+try:
+    model.save_pretrained(os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
+except:
+    torch.save(model.state_dict(), os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
 
-# # 학습 로그 저장
-# timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-# save_log(log_data, f"training_log_{timestamp}.json")
 
-# gc.collect()
-# torch.cuda.empty_cache()
-# wandb.finish()
+# 학습 로그 저장
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+save_log(log_data, f"training_log_{timestamp}.json")
+
+gc.collect()
+torch.cuda.empty_cache()
+wandb.finish()
 
 
 config.NUM_EPOCHS = 60
 config.model_name = 'wav2vec_II'
 config.lr = 5e-5
 config.DROPOUT_RATE = 0.4
-config.path_best = os.path.join(config.MODEL_BASE_DIR, 'wav2vec2_finetuned')
+
+# for temp
+#config.path_best = os.path.join(config.MODEL_BASE_DIR, 'wav2vec2_finetuned')
 print(config.path_best)
 new_model = Wav2Vec2ClassifierModel(config, num_labels=n_labels, dropout=config.DROPOUT_RATE)
 new_model.to(device)
 
-config.WANDB_PROJECT = 'wav2vec_II_classifier_0_0'
+config.WANDB_PROJECT = 'wav2vec_II_classifier'
 config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
 os.makedirs(config.MODEL_DIR, exist_ok=True)
 
@@ -291,8 +294,11 @@ except Exception as e:
     print(f"Failed to initialize wandb: {e}")
 
 new_model, log_data = train(new_model, train_dataloader, val_dataloader, config)
-new_model.save_pretrained(os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
 
+try:
+    new_model.save_pretrained(os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
+except:
+    torch.save(new_model.state_dict(), os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 save_log(log_data, f"training_log_{timestamp}.json")
 
