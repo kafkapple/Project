@@ -73,7 +73,7 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
             #_, preds = torch.max(outputs.logits, 1)
             
             all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(labels.numpy())
+            all_labels.extend(labels.cpu().numpy())
             all_embeddings.extend(outputs.logits.cpu().numpy())
 
     # Convert lists to numpy arrays
