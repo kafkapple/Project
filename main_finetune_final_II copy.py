@@ -22,6 +22,23 @@ import torch
 gc.collect()
 torch.cuda.empty_cache()
 
+def save_model(model, path):
+    if hasattr(model, 'save_pretrained'):
+        model.save_pretrained(path)
+    else:
+        torch.save(model.state_dict(), os.path.join(path, 'model.pt'))
+
+def load_model(model, path):
+    if hasattr(model, 'from_pretrained'):
+        return model.from_pretrained(path)
+    else:
+        model.load_state_dict(torch.load(os.path.join(path, 'model.pt')))
+        return model
+def get_logits_from_output(outputs):
+    if isinstance(outputs, dict):
+        return outputs['logits']
+    else:
+        return outputs.logits
 def evaluate(model, dataloader, criterion, device):
     model.eval()
     total_loss = 0
@@ -34,7 +51,7 @@ def evaluate(model, dataloader, criterion, device):
             labels = batch['label'].to(device)
             
             outputs = model(audio_input)
-            logits = outputs.logits  # 변경된 부분
+            logits = get_logits_from_output(outputs)  # 변경된 부분
             
             loss = criterion(logits, labels)
             total_loss += loss.item()
@@ -112,7 +129,7 @@ def train(model, train_dataloader, val_dataloader, config):
             labels = batch['label'].to(device)
 
             outputs = model(audio_input)
-            logits = outputs.logits#['logits']
+            logits = get_logits_from_output(outputs)#outputs.logits#['logits']
             loss = criterion(logits, labels)
             
             loss.backward()
@@ -157,17 +174,21 @@ def train(model, train_dataloader, val_dataloader, config):
         if val_f1 > best_val_f1:
             best_val_f1 = val_f1
             try:
-                model.save_pretrained(config.path_best)
+                save_model(model, config.path_best)
+                #model.save_pretrained(config.path_best)
             except:
-                torch.save(model.state_dict(), config.path_best)
+                print('err.')
+                #torch.save(model.state_dict(), config.path_best)
         # 주기적으로 모델 저장 (예: 5 에폭마다)
         if (epoch + 1) % config.N_STEP_FIG == 0:
             path_epoch = f"{os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)}_epoch_{epoch+1}"
             os.makedirs(path_epoch, exist_ok=True)
             try:
-                model.save_pretrained(path_epoch)
+                save_model(model, path_epoch)
+                #model.save_pretrained(path_epoch)
             except:
-                torch.save(model.state_dict(), path_epoch)
+                print('err.')
+               # torch.save(model.state_dict(), path_epoch)
             
     return model, log_data
 
@@ -188,8 +209,8 @@ class Wav2Vec2ClassifierModel(nn.Module):
         outputs = self.wav2vec2(input_values)
         hidden_states = outputs.last_hidden_state
         pooled_output = torch.mean(hidden_states, dim=1)
-        return {'last_hidden_state': hidden_states, 'logits': self.classifier(pooled_output)}
-
+        logits = self.classifier(pooled_output)
+        return logits
 
 ### 
 config=Config()
@@ -278,7 +299,7 @@ print(config.path_best)
 new_model = Wav2Vec2ClassifierModel(config, num_labels=n_labels, dropout=config.DROPOUT_RATE)
 new_model.to(device)
 
-config.WANDB_PROJECT = 'wav2vec_II_classifier_0'
+config.WANDB_PROJECT = 'wav2vec_II_classifier'
 config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
 os.makedirs(config.MODEL_DIR, exist_ok=True)
 
@@ -295,10 +316,13 @@ except Exception as e:
 
 new_model, log_data = train(new_model, train_dataloader, val_dataloader, config)
 
+path_new=os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
+os.makedirs(path_new, exist_ok=True)
+
 try:
-    new_model.save_pretrained(os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
+    save_model(new_model,path_new )
 except:
-    torch.save(new_model.state_dict(), os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
+    print('save err')
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 save_log(log_data, f"training_log_{timestamp}.json")
 
