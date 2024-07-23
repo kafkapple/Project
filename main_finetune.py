@@ -59,7 +59,7 @@ def collate_fn(batch):
 # config
 config=Config()
 print(config)
-data_dir=os.path.join(config.DATA_DIR, 'MELD.Raw', 'train_audio')
+data_dir=os.path.join(config.DATA_DIR, 'MELD', 'train_audio')
 label_dir=os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv')
 # load class label info
 label_info_df= pd.read_csv(label_dir)
@@ -98,10 +98,10 @@ model = Wav2Vec2ForSequenceClassification.from_pretrained("facebook/wav2vec2-bas
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 criterion = nn.CrossEntropyLoss()
 
-num_epochs = 10
+num_epochs = 3
 for epoch in tqdm(range(num_epochs)):
   
     # train_loss, train_acc, train_f1 = train_epoch(model, dataloader, optimizer, criterion, device)
