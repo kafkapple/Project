@@ -57,7 +57,7 @@ def evaluate(model, dataloader, criterion, device):
             labels = batch['label'].to(device)
             
             outputs = model(audio_input)
-            print(type(outputs), outputs)
+            #print(type(outputs), outputs)
             logits = get_logits_from_output(outputs)  # 변경된 부분
             
             loss = criterion(logits, labels)
