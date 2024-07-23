@@ -164,7 +164,7 @@ def train(model, train_dataloader, val_dataloader, config):
         if val_f1 > best_val_f1:
             best_val_f1 = val_f1
             
-            model.save_pretrained(path_best)
+            model.save_pretrained(config.path_best)
         
         # 주기적으로 모델 저장 (예: 5 에폭마다)
         if (epoch + 1) % 5 == 0:
@@ -227,12 +227,12 @@ config.NUM_EPOCHS = 60
 config.model_name = 'wav2vec_II'
 config.lr = 5e-5
 config.DROPOUT_RATE = 0.4
-config.path_best = os.path.join(config.MODEL_BASE_DIR, 'wav2vec2_finetuned')
+#config.path_best = os.path.join(config.MODEL_BASE_DIR, 'wav2vec2_finetuned')
 print(config.path_best)
 new_model = Wav2Vec2ClassifierModel(config, num_labels=n_labels, dropout=config.DROPOUT_RATE)
 new_model.to(device)
 
-config.WANDB_PROJECT = 'wav2vec_II_classifier_0'
+config.WANDB_PROJECT = 'wav2vec_II_classifier'
 config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
 os.makedirs(config.MODEL_DIR, exist_ok=True)
 
