@@ -198,7 +198,7 @@ class Wav2Vec2ClassifierModel(nn.Module):
 
 ### 
 config=Config()
-num_epochs = 20
+num_epochs = 30
 config.NUM_EPOCHS=num_epochs
 #lr=1e-4
 n_batch = 4 # 74% GPU. 8 is danger high n_batch -> small batch size -> low gpu?
@@ -292,9 +292,9 @@ config_wandb = {'lr': config.lr,
                 }
 wandb.init(id=id_wandb, config = config_wandb, project=config.WANDB_PROJECT)#, 
 
-model, log_data = train(model, train_dataloader, val_dataloader, config)
+new_model, log_data = train(new_model, train_dataloader, val_dataloader, config)
 # 최종 모델 저장
-model.save_pretrained(os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
+new_model.save_pretrained(os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
 
 # 학습 로그 저장
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
