@@ -171,18 +171,18 @@ def main():
     # ### Dataset
     # data_dir = load_data(config)#, config.dataset['MELD'])
     # # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_samples=1000
+    n_samples=200
         # text data
     df = pd.read_csv('https://raw.githubusercontent.com/declare-lab/MELD/master/data/MELD/train_sent_emo.csv')
     
     df_sampled = data_prep(df, 'Emotion', n_samples=n_samples)
     df.to_csv(os.path.join(config.DATA_DIR, 'MELD_train.csv'))
-    df_sampled.to_csv(os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv'))
+    df_sampled.to_csv(os.path.join(config.DATA_DIR, f'MELD_train_sampled_toy.csv'))
     
     
     
 # save audio files corresponding to Dialogue_ID and Utterance_ID in text_train_df_toy
-    data_dir = os.path.join(config.DATA_DIR, 'MELD', 'train_audio')
+    data_dir = os.path.join(config.DATA_DIR, 'MELD', f'train_audio_toy')
     prep_audio(config, df_sampled, data_dir, 'train')
     #data, labels = preprocess_data_meld(data_dir, df_sampled)
     

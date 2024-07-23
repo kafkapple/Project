@@ -25,7 +25,8 @@ def generate_unique_filename(filename):
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
-        nn.init.xavier_uniform_(m.weight)
+        #nn.init.xavier_uniform_(m.weight)
+        nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
         nn.init.constant_(m.bias, 0.01)
     elif isinstance(m, nn.BatchNorm1d):
         nn.init.constant_(m.weight, 1)
@@ -138,19 +139,32 @@ def main(args=None):
         
     elif args.mode == 'train':
         IS_RESUME=False
-        select_data = int(input('Select dataset for training.\n1. RAVDESS\n2. MELD\n'))
+        select_data = int(input('Select dataset for training.\n1. RAVDESS\n2. MELD\n3. MELD toy\n'))
         if select_data ==1:
             config.DATA_NAME='RAVDESS'
         elif select_data == 2:
             config.DATA_NAME='MELD'
+        elif select_data == 3:
+            config.DATA_NAME = 'MELD_toy'
         else:
             print('ERR')
         
          #data_dir = load_data(config) 
         data_dir = os.path.join(config.DATA_DIR, config.DATA_NAME)
+        print('Data Dir: ', data_dir)
         #extracted_path = os.path.join(config.DATA_DIR, f"{config.DATA_NAME}.Raw")
         if config.DATA_NAME=="MELD":
+            data_dir=os.path.join(data_dir, 'train_audio')
+            
             text_train_df= pd.read_csv(os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv'))
+            data, labels = preprocess_data_meld(data_dir, text_train_df)
+            dict_label = {v: k for k, v in config.LABELS_EMO_MELD.items()} 
+            labels=[dict_label[val] for val in labels]
+            config.LABELS_EMOTION =config.LABELS_EMO_MELD
+        elif config.DATA_NAME=="MELD_toy":
+            data_dir=os.path.join(data_dir, 'train_audio_toy')
+
+            text_train_df= pd.read_csv(os.path.join(config.DATA_DIR, 'MELD_train_sampled_toy.csv'))
             data, labels = preprocess_data_meld(data_dir, text_train_df)
             dict_label = {v: k for k, v in config.LABELS_EMO_MELD.items()} 
             labels=[dict_label[val] for val in labels]
@@ -211,10 +225,17 @@ def main(args=None):
         #extracted_path = os.path.join(config.DATA_DIR, f"{config.DATA_NAME}.Raw")
         if config.DATA_NAME=="MELD":
             text_train_df= pd.read_csv(os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv'))
-            data, labels = preprocess_data_meld(data_dir, text_train_df)
+            data, labels = preprocess_data_meld(os.path.join(data_dir, 'train_audio'), text_train_df)
             dict_label = {v: k for k, v in config.LABELS_EMO_MELD.items()} 
             labels=[dict_label[val] for val in labels]
             config.LABELS_EMOTION =config.LABELS_EMO_MELD
+        elif config.DATA_NAME=="MELD_toy":
+            text_train_df= pd.read_csv(os.path.join(config.DATA_DIR, 'MELD_train_sampled_toy.csv'))
+            data, labels = preprocess_data_meld(os.path.join(data_dir, 'train_audio_toy'), text_train_df)
+            dict_label = {v: k for k, v in config.LABELS_EMO_MELD.items()} 
+            labels=[dict_label[val] for val in labels]
+            config.LABELS_EMOTION =config.LABELS_EMO_MELD
+            
         elif config.DATA_NAME=='RAVDESS':
             data, labels = preprocess_data(data_dir)
         else:
@@ -224,37 +245,37 @@ def main(args=None):
         
         config.WANDB_PROJECT = 'train'+'_'+config.MODEL+'_'+config.DATA_NAME
         config.IS_RESUME=True
-        models = list_models(config)
-        if models:
-            model_index = int(input("Select the model to retrain: ")) - 1
-            config.MODEL_SAVE_PATH = models[model_index]
-            config.CKPT_SAVE_PATH = config.MODEL_SAVE_PATH.replace('best_model', 'checkpoint')
-            file_name, _ = os.path.splitext(os.path.basename(config.MODEL_SAVE_PATH))
-            file_name = file_name.replace('best_model_', '')
-            config.model_name=file_name
-            folder_path = os.path.dirname(config.MODEL_SAVE_PATH)
-            new_path=os.path.join(folder_path, config.model_name)
-            config.MODEL_DIR=new_path
-            os.makedirs(new_path, exist_ok=True)
-            os.makedirs(os.path.join(new_path, 'results'), exist_ok=True)
-            print(new_path)
+        # models = list_models(config)
+        # if models:
+        #     model_index = int(input("Select the model to retrain: ")) - 1
+        #     config.MODEL_SAVE_PATH = models[model_index]
+        #     config.CKPT_SAVE_PATH = config.MODEL_SAVE_PATH.replace('best_model', 'checkpoint')
+        #     file_name, _ = os.path.splitext(os.path.basename(config.MODEL_SAVE_PATH))
+        #     file_name = file_name.replace('best_model_', '')
+        #     config.model_name=file_name
+        #     folder_path = os.path.dirname(config.MODEL_SAVE_PATH)
+        #     new_path=os.path.join(folder_path, config.model_name)
+        #     config.MODEL_DIR=new_path
+        #     os.makedirs(new_path, exist_ok=True)
+        #     os.makedirs(os.path.join(new_path, 'results'), exist_ok=True)
+        #     print(new_path)
             
-            additional_epochs = int(input("Number of epoch for training: "))
-            print(f'Model will be trained for {additional_epochs} epochs')
+        #     additional_epochs = int(input("Number of epoch for training: "))
+        #     print(f'Model will be trained for {additional_epochs} epochs')
             
-            model, optimizer, criterion, device = prep_model(config, train_loader, is_sweep=False)
-            _,_, global_epoch, best_val_loss,_ = load_checkpoint(config, model, optimizer, device)
+        #     model, optimizer, criterion, device = prep_model(config, train_loader, is_sweep=False)
+        #     _,_, global_epoch, best_val_loss,_ = load_checkpoint(config, model, optimizer, device)
             
          
-            config.NUM_EPOCHS = additional_epochs
-            print(f'Preparing resume training. Global epoch is set to previous epoch +1: {config.global_epoch}')
+        #     config.NUM_EPOCHS = additional_epochs
+        #     print(f'Preparing resume training. Global epoch is set to previous epoch +1: {config.global_epoch}')
             
-            history, best_val_loss, best_val_acc = train_model(model, train_loader, val_loader, config, device, optimizer, criterion)
-            config.history=history
-            visualize_results(config, model, test_loader, device, history, 'test')
-            print(f"Best val loss: {best_val_loss:.4f}")
-        else:
-            print("No models to resume.")
+        #     history, best_val_loss, best_val_acc = train_model(model, train_loader, val_loader, config, device, optimizer, criterion)
+        #     config.history=history
+        #     visualize_results(config, model, test_loader, device, history, 'test')
+        #     print(f"Best val loss: {best_val_loss:.4f}")
+        # else:
+        #     print("No models to resume.")
 
     elif args.mode == 'sweep':
         config.IS_SWEEP=True

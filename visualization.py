@@ -61,9 +61,9 @@ def visualize_results(config, model, data_loader, device, history, stage):
     all_embeddings = np.array(all_embeddings)
 
     # Confusion Matrix
-    fig = plot_confusion_matrix(all_labels, all_preds, config.LABELS_EMOTION)
-    save_and_log_figure(stage, fig, config, "confusion_matrix", f"{stage} Confusion Matrix")
-    plt.close(fig)
+    fig_cm = plot_confusion_matrix(all_labels, all_preds, config.LABELS_EMOTION)
+    save_and_log_figure(stage, fig_cm, config, "confusion_matrix", f"{stage} Confusion Matrix")
+    plt.close(fig_cm)
 
     # Embeddings visualization
     max_samples = config.N_EMBEDDINGS # to show
@@ -77,15 +77,16 @@ def visualize_results(config, model, data_loader, device, history, stage):
     
     print(f"Number of embeddings: {len(embeddings)}")
     print(f"Number of labels: {len(labels)}")
+    try:
+        fig_embd = visualize_embeddings(config, embeddings, labels)
     
-    fig = visualize_embeddings(config, embeddings, labels)
-    
-    save_and_log_figure(stage, fig, config, "embeddings", f"{stage.capitalize()} Embeddings (t-SNE)")
-    plt.close(fig)
-    
-    fig = perform_rsa(model, data_loader, config.device)
-    save_and_log_figure(stage, fig, config, "Representation_similarity", f"{stage.capitalize()}")
-    plt.close(fig)
+        save_and_log_figure(stage, fig_embd, config, "embeddings", f"{stage.capitalize()} Embeddings (t-SNE)")
+        plt.close(fig_embd)
+    except:
+        print('No embedding.')    
+    fig_rsa = perform_rsa(model, data_loader, config.device)
+    save_and_log_figure(stage, fig_rsa, config, "Representation_similarity", f"{stage.capitalize()}")
+    plt.close(fig_rsa)
 
 def extract_embeddings_and_predictions(model, data_loader, device):
     model.eval()
