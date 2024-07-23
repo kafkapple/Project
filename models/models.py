@@ -72,8 +72,6 @@ def write_best_model_info(config, info, dict_models):
         for i in dict_models:
             f.write(f'Model: {i} / {dict_models[i]}')
             
-        
-
 def find_best_model(config, test_loader, device, exclude_models=None):
     model_folders = [f for f in os.listdir(config.MODEL_BASE_DIR) if os.path.isdir(os.path.join(config.MODEL_BASE_DIR, f))]
     best_models = []
@@ -139,12 +137,6 @@ def prep_model(config, train_loader, is_sweep=False):
     config.device = device
     print(f'\n###### Preparing Model...\nCurrent path: {config.CKPT_SAVE_PATH}\n\nModel:{config.MODEL}\nOptimizer:{config.OPTIMIZER}\nActivation: {config.ACTIVATION}\nBatch size: {config.BATCH_SIZE}\nlearning rate: {config.lr}\nDrop out: {config.DROPOUT_RATE}\n')
     
-    # # Data settings
-    # RATIO_TRAIN: float = 0.7
-    # RATIO_TEST: float = 0.15
-    # DATA_NAME= "RAVDESS_audio_speech"
-    # # Paths
-    # PROJECT_DIR: str = "Project"#"NMA_Project_SER"
     #### Optimizer & Cost function 
     model = get_model(config, train_loader)
     if config.OPTIMIZER == "adam":
@@ -164,7 +156,7 @@ def prep_model(config, train_loader, is_sweep=False):
         print(f'Wandb id generated: {id_wandb}')
         config.id_wandb = id_wandb
         wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS)#, resume=True)
-        model = get_model(config, train_loader)
+        # model = get_model(config, train_loader)
     elif config.CUR_MODE == 'resume':
         
         model, optimizer, global_epoch, best_val_accuracy, id_wandb= load_checkpoint(config, model, optimizer, device)
@@ -307,12 +299,13 @@ class EmotionRecognitionModel_v1(EmotionRecognitionBase):
 class EmotionRecognitionModel_v2(EmotionRecognitionBase):
     def __init__(self, input_size, num_classes, dropout_rate, activation):
         super().__init__(input_size, num_classes, dropout_rate, activation)
+        momentum=0.01
         self.fc1 = nn.Linear(input_size, 256)
-        self.bn1 = nn.BatchNorm1d(256, momentum=0.1)
+        self.bn1 = nn.BatchNorm1d(256, momentum=momentum)
         self.fc2 = nn.Linear(256, 128)
-        self.bn2 = nn.BatchNorm1d(128, momentum=0.1)
+        self.bn2 = nn.BatchNorm1d(128, momentum=momentum)
         self.fc3 = nn.Linear(128, 64)
-        self.bn3 = nn.BatchNorm1d(64, momentum=0.1)
+        self.bn3 = nn.BatchNorm1d(64, momentum=momentum)
         self.fc4 = nn.Linear(64, num_classes)
 
     def forward(self, x):

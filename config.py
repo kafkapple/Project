@@ -15,16 +15,26 @@ from collections import namedtuple
 # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 @dataclass
 class Config:
-    N_SAMPLE=2000
+    N_SAMPLE=500
+    
     dataset={"RAVDESS": "https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1",
-         "MELD": "https://huggingface.co/datasets/declare-lab/MELD/resolve/main/MELD.Raw.tar.gz"}
+         "MELD": "https://huggingface.co/datasets/declare-lab/MELD/resolve/main/MELD.Raw.tar.gz",
+         "MELD_toy": "https://huggingface.co/datasets/declare-lab/MELD/resolve/main/MELD.Raw.tar.gz"}
     # select_dataset = "RAVDESS"
     DATA_NAME= "MELD"#"RAVDESS"#_audio_speech"
-    
+    if DATA_NAME=="MELD_toy":
+        N_SAMPLE = 30
+    VISUALIZE = False
+    BOOL = True
+    MODEL_INIT: bool =BOOL
+    SCHEDULER: bool = BOOL
+    GRADIENT_CLIP: bool = BOOL
+    eta_min: float = 1e-4 /100
+    #momentum = 0.01
     model_name: str = ''
     early_stop_epoch: int = 100
     CUR_MODE: str ='' # current mode
-    N_STEP_FIG: int = 4
+    N_STEP_FIG: int = 2
     # General settings
     SEED: int = 2024
     NUM_EPOCHS: int = 5
@@ -33,8 +43,8 @@ class Config:
     BATCH_SIZE: int = 32
     
     DROPOUT_RATE: float = 0.4
-    lr: float = 1e-4#0.0005
-    eta_min: float = 1e-4 /10
+    lr: float = 0.0005
+    
     weight_decay: float =1e-5
     
     # Model settings
@@ -42,10 +52,7 @@ class Config:
     ACTIVATION: str = "relu"
     OPTIMIZER: str = "adam"
     
-    BOOL = True
-    MODEL_INIT: bool =BOOL
-    SCHEDULER: bool = BOOL
-    GRADIENT_CLIP: bool = BOOL
+   
     
     history: dict = field(default_factory=lambda: {
         'train': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []},

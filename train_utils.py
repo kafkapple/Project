@@ -155,10 +155,10 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
     progress_bar = tqdm(dataloader, desc="Training")
     for features, batch_labels in progress_bar:
         features, batch_labels = features.to(device), batch_labels.to(device)
-        
-        for name, module in model.named_modules():
-            if isinstance(module, torch.nn.BatchNorm1d):
-                print(f"{name} - mean: {module.running_mean.mean().item():.4f}, var: {module.running_var.mean().item():.4f}")
+        if config.VISUALIZE:
+            for name, module in model.named_modules():
+                if isinstance(module, torch.nn.BatchNorm1d):
+                    print(f"{name} - mean: {module.running_mean.mean().item():.4f}, var: {module.running_var.mean().item():.4f}")
         
         optimizer.zero_grad()
         outputs = model(features)
@@ -168,7 +168,7 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
         if config.GRADIENT_CLIP:
             print('Gradient Clipping')
             #gradient clipping
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
         
         optimizer.step()
         
@@ -186,9 +186,10 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
     f1 = f1_score(all_labels, all_preds, average=metric_average)
     
     ### for debugging - gradient chk
-    for name, param in model.named_parameters():
-        if param.grad is not None:
-            print(f"{name}: grad_norm: {param.grad.norm().item()}")
+    if config.VISUALIZE:
+        for name, param in model.named_parameters():
+            if param.grad is not None:
+                print(f"{name}: grad_norm: {param.grad.norm().item()}")
     
     return epoch_loss, accuracy, precision, recall, f1
 

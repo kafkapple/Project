@@ -34,43 +34,6 @@ import os
 from tqdm import tqdm
 import moviepy.editor as mp
 
-# def prep_audio(config, text_train_df, destination_base_path, TARGET):
-#     os.makedirs(destination_base_path, exist_ok=True)
-#     if TARGET == 'train':
-#         TARGET_SPLIT = 'train_splits'
-#     elif TARGET == 'test':
-#         TARGET_SPLIT = 'output_repeated_splits_test'
-#     else:
-#         print('No target specified.')
-#         return
-
-#     for dialogue_id, utterance_id in tqdm(zip(text_train_df["Dialogue_ID"], text_train_df["Utterance_ID"])):
-#         # Source and destination paths
-#         source_path = os.path.join(config.DATA_DIR, 'MELD.Raw', TARGET, TARGET_SPLIT, f'dia{dialogue_id}_utt{utterance_id}.mp4')
-#         destination_path = os.path.join(destination_base_path, f'dia{dialogue_id}_utt{utterance_id}.wav')
-        
-#         # Check if the destination file already exists
-#         if os.path.exists(destination_path):
-#             print(f'{destination_path} already exists, skipping.')
-#             continue
-        
-#         # Load the video file
-#         video = mp.VideoFileClip(source_path)
-        
-#         # Extract the audio
-#         audio = video.audio
-        
-#         # Write the audio file to the destination path
-#         audio.write_audiofile(destination_path)
-#         audio.close()
-#         video.close()
-
-# import os
-# from tqdm import tqdm
-# import moviepy.editor as mp
-import os
-from tqdm import tqdm
-import moviepy.editor as mp
 
 def prep_audio(config, text_train_df, destination_base_path, TARGET):  # by Lek Hong
     
@@ -117,27 +80,6 @@ def prep_audio(config, text_train_df, destination_base_path, TARGET):  # by Lek 
             print(f"Error processing {source_path}: {e}")
             continue
 
-# def prep_audio(config, text_train_df, destination_base_path, TARGET): # by Lek Hong
-    
-#     os.makedirs(destination_base_path, exist_ok=True)
-#     if TARGET=='train':
-#         TARGET_SPLIT='train_splits'
-#     elif TARGET=='test':
-#         TARGET_SPLIT='output_repeated_splits_test'
-#     else:
-#         print('no target.')
-#     for dialogue_id, utterance_id in tqdm(zip(text_train_df["Dialogue_ID"], text_train_df["Utterance_ID"])):
-#       # Source and destination paths
-#         source_path = os.path.join(config.DATA_DIR, 'MELD.Raw',  TARGET, TARGET_SPLIT, f'dia{dialogue_id}_utt{utterance_id}.mp4')
-#         destination_path = os.path.join(destination_base_path, f'dia{dialogue_id}_utt{utterance_id}.wav') #f'/content/drive/\
-#         #print(f'Source to Dest: {source_path} -> {destination_path}')
-#         # Load the video file
-#         video = mp.VideoFileClip(source_path)
-
-#         # Extract the audio
-#         audio = video.audio
-
-#         # Save the audio file
         audio.write_audiofile(destination_path)
 
 def extract_features_and_labels(dataloader):
