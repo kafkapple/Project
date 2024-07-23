@@ -22,9 +22,9 @@ class Config:
     DATA_NAME= "MELD"#"RAVDESS"#_audio_speech"
     
     model_name: str = ''
-    early_stop_epoch: int = 10
+    early_stop_epoch: int = 100
     CUR_MODE: str ='' # current mode
-    N_STEP_FIG: int = 2
+    N_STEP_FIG: int = 4
     # General settings
     SEED: int = 2024
     NUM_EPOCHS: int = 5
@@ -33,8 +33,8 @@ class Config:
     BATCH_SIZE: int = 32
     
     DROPOUT_RATE: float = 0.4
-    lr: float = 0.0005
-    eta_min: float = 1e-4 
+    lr: float = 1e-4#0.0005
+    eta_min: float = 1e-4 /10
     weight_decay: float =1e-5
     
     # Model settings
@@ -42,7 +42,8 @@ class Config:
     ACTIVATION: str = "relu"
     OPTIMIZER: str = "adam"
     
-    BOOL = False 
+    BOOL = True
+    MODEL_INIT: bool =BOOL
     SCHEDULER: bool = BOOL
     GRADIENT_CLIP: bool = BOOL
     
@@ -54,16 +55,17 @@ class Config:
     # Data settings
     RATIO_TRAIN: float = 0.7
     RATIO_TEST: float = 0.15
-
-    LABELS_EMO_MELD: dict = field(default_factory=lambda: {
-        0: 'anger', 1: 'disgust', 2: 'fear', 3: 'joy',
-        4: 'neutral', 5: 'sadness', 6: 'surprise'
-    })
     
     LABELS_EMOTION: dict = field(default_factory=lambda: {
         0: 'neutral', 1: 'calm', 2: 'happy', 3: 'sad',
         4: 'angry', 5: 'fearful', 6: 'disgust', 7: 'surprised'
     })
+    LABELS_EMO_MELD: dict = field(default_factory=lambda: {
+        0: 'anger', 1: 'disgust', 2: 'fear', 3: 'joy',
+        4: 'neutral', 5: 'sadness', 6: 'surprise'
+    })
+    
+    
     LABELS_EMOTION_TEXT: dict = field(default_factory=lambda:{
         'sadness': 0, 'anger': 1, 'love': 2, 'surprise': 3, 'fear': 4, 'joy': 5
         })

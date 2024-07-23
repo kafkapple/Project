@@ -106,8 +106,6 @@ def extract_embeddings_and_predictions(model, data_loader, device):
     
     return np.array(all_embeddings), np.array(all_labels), np.array(all_predictions)
 
-
-
 def visualize_embeddings(config, embeddings, labels, method='tsne'):
     print('\nVisualization of embedding starts...\n')
     if method == 'pca':

@@ -6,6 +6,7 @@ import os
 from collections import namedtuple
 from visualization import visualize_results
 
+
 def evaluate_baseline(model, X_test, y_test, config):
     y_pred = model.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
@@ -24,15 +25,17 @@ def load_checkpoint(config, model, optimizer, device):
         if optimizer is not None:
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             print('Loading Optimizer info. ')
-        if config.SCHEDULER:
+        if config.SCHEDULER: # chk
+            print('Scheduler on.')
             ### Scheduler    
-            T_max = config.NUM_EPOCHS  
+            T_max = config.NUM_EPOCHS  *2
             eta_min = config.eta_min
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
             
             if 'scheduler_state_dict' in checkpoint and scheduler is not None:
                 scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
                 print('Loading Scheduler info.')
+            
         
         global_epoch=checkpoint['global_epoch']
 
@@ -64,26 +67,22 @@ def train_model(model, train_loader, val_loader, config, device, optimizer, crit
         'train': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []},
         'val': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []}
     }
-    # Epoch info
-    # if not config.IS_RESUME:
-    #     config.global_epoch = 0
-    print('Global epoch was: ', config.global_epoch)
+
     global_epoch = config.global_epoch#config.initial_epoch
-    global_epoch+=1
-    print(f'global epoch updated: {global_epoch}')
-    config.global_epoch=global_epoch
     start_epoch = global_epoch
     end_epoch=config.global_epoch + config.NUM_EPOCHS
     
     if config.SCHEDULER:
-        T_max = config.NUM_EPOCHS 
+        T_max = config.NUM_EPOCHS *2
         eta_min = config.eta_min 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
     
-    progress_bar = tqdm(range(start_epoch, end_epoch), desc="[ Total Epoch Progress ]")
+    progress_bar = tqdm(range(start_epoch+1, end_epoch+1), desc="[ Total Epoch Progress ]")
 
     for epoch in progress_bar:
-        print(f"\nGlobal Epoch [{global_epoch}/{end_epoch - 1}]")
+        global_epoch+=1
+        config.global_epoch=global_epoch
+        #print(f'global epoch updated: {global_epoch}')
         train_metrics = train_epoch(config, model, train_loader, criterion, optimizer, device) #train
         val_metrics = evaluate_model(config, model, val_loader, criterion, device) #val
         # Update history
@@ -94,12 +93,15 @@ def train_model(model, train_loader, val_loader, config, device, optimizer, crit
         print(f"Train - Loss: {train_metrics[0]:.4f}, Accuracy: {train_metrics[1]:.4f}, F1: {train_metrics[4]:.4f}")
         print(f"Val - Loss: {val_metrics[0]:.4f}, Accuracy: {val_metrics[1]:.4f}, F1: {val_metrics[4]:.4f}")
         
-        # Log metrics
+        
+        ######
+        #Log metrics chk
         log_metrics('train', train_metrics, global_epoch)
         log_metrics('val', val_metrics[:5], global_epoch)  # val_metrics might have 7 values, we only need first 5
         
         if global_epoch % config.N_STEP_FIG ==0: # visualization for val data 
             visualize_results(config, model, val_loader, device, history, 'val')
+            
         if config.SCHEDULER:
             scheduler.step()#val_metrics[0]) #[0] val loss
         
@@ -128,17 +130,16 @@ def train_model(model, train_loader, val_loader, config, device, optimizer, crit
         if config.IS_SWEEP:
             print(f'Sweep is finished. ID is saved: {config.sweep_id}')
             ckpt['sweep_id']=config.sweep_id
-        if config.SCHEDULER:
+        if config.SCHEDULER: #chk
             ckpt['scheduler_state_dict']= scheduler.state_dict()
+            current_lr = optimizer.param_groups[0]['lr']
+            print(f"Current learning rate: {current_lr}")
+            wandb.log({"learning_rate": current_lr}, step=global_epoch)
             
         torch.save(ckpt, config.CKPT_SAVE_PATH)
 
         print(f"Checkpoint saved to {config.CKPT_SAVE_PATH} at global epoch: {global_epoch}\n{ckpt['id_wandb']}\n")
-        
-        current_lr = optimizer.param_groups[0]['lr']
-        print(f"Current learning rate: {current_lr}")
-        wandb.log({"learning_rate": current_lr}, step=global_epoch)
-                
+            
         
         if early_stop_counter >= config.early_stop_epoch:
             print("Early Stopping!")
@@ -155,12 +156,17 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
     for features, batch_labels in progress_bar:
         features, batch_labels = features.to(device), batch_labels.to(device)
         
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.BatchNorm1d):
+                print(f"{name} - mean: {module.running_mean.mean().item():.4f}, var: {module.running_var.mean().item():.4f}")
+        
         optimizer.zero_grad()
         outputs = model(features)
         loss = criterion(outputs, batch_labels)
         loss.backward()
         
         if config.GRADIENT_CLIP:
+            print('Gradient Clipping')
             #gradient clipping
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         
@@ -179,10 +185,10 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
     recall = recall_score(all_labels, all_preds, average=metric_average)
     f1 = f1_score(all_labels, all_preds, average=metric_average)
     
-    #### for debugging - gradient chk
-    # for name, param in model.named_parameters():
-    #     if param.grad is not None:
-    #         print(f"{name}: grad_norm: {param.grad.norm().item()}")
+    ### for debugging - gradient chk
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            print(f"{name}: grad_norm: {param.grad.norm().item()}")
     
     return epoch_loss, accuracy, precision, recall, f1
 

@@ -89,29 +89,11 @@ def main(args=None):
             break
     
     # Dataset
-    
-    #data_dir = load_data(config) 
-    data_dir = os.path.join(config.DATA_DIR, config.DATA_NAME)
-    #extracted_path = os.path.join(config.DATA_DIR, f"{config.DATA_NAME}.Raw")
-    if config.DATA_NAME=="MELD":
-        text_train_df= pd.read_csv(os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv'))
-        data, labels = preprocess_data_meld(data_dir, text_train_df)
-        dict_label = {v: k for k, v in config.LABELS_EMO_MELD.items()} 
-        labels=[dict_label[val] for val in labels]
-    elif config.DATA_NAME=='RAVDESS':
-        data, labels = preprocess_data(data_dir)
-    else:
-        print('err data')
-    
-    
-    train_loader, val_loader, test_loader = prepare_dataloaders(data, labels, config)
-    
     # Best model info chk
     chk_best_model_info(config)
     
-    
     config.CUR_MODE=args.mode
-    config.WANDB_PROJECT = args.mode+'_'+config.MODEL
+    config.WANDB_PROJECT = args.mode+'_'+config.MODEL+config.DATA_NAME
     
     file_name, _ = os.path.splitext(os.path.basename(config.MODEL_SAVE_PATH))
     file_name = file_name.replace('best_model_', '')
@@ -119,8 +101,9 @@ def main(args=None):
     print('Model name: ',config.model_name)
     
     folder_path = os.path.dirname(config.MODEL_SAVE_PATH)
-    new_path=os.path.join(folder_path, config.model_name)
+    new_path=os.path.join(folder_path, config.model_name) # chk
     config.MODEL_DIR=new_path
+    print('Model path New: ', config.MODEL_DIR)
   
     os.makedirs(os.path.join(new_path, 'results'), exist_ok=True)
     os.makedirs(new_path, exist_ok=True)
@@ -133,7 +116,7 @@ def main(args=None):
             config.DATA_NAME = 'RAVDESS'
         elif SELECT_DATA =='2':
             config.DATA_NAME ='MELD'
-            config.TARGET=input("train or test dataset?")
+            config.TARGET=input("train or test dataset?\n")
     
             print(f'Dataset: {config.DATA_NAME} / {config.TARGET} will be prepared.\nSamples: {config.N_SAMPLE}')
    
@@ -155,6 +138,31 @@ def main(args=None):
         
     elif args.mode == 'train':
         IS_RESUME=False
+        select_data = int(input('Select dataset for training.\n1. RAVDESS\n2. MELD\n'))
+        if select_data ==1:
+            config.DATA_NAME='RAVDESS'
+        elif select_data == 2:
+            config.DATA_NAME='MELD'
+        else:
+            print('ERR')
+        
+         #data_dir = load_data(config) 
+        data_dir = os.path.join(config.DATA_DIR, config.DATA_NAME)
+        #extracted_path = os.path.join(config.DATA_DIR, f"{config.DATA_NAME}.Raw")
+        if config.DATA_NAME=="MELD":
+            text_train_df= pd.read_csv(os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv'))
+            data, labels = preprocess_data_meld(data_dir, text_train_df)
+            dict_label = {v: k for k, v in config.LABELS_EMO_MELD.items()} 
+            labels=[dict_label[val] for val in labels]
+            config.LABELS_EMOTION =config.LABELS_EMO_MELD
+        elif config.DATA_NAME=='RAVDESS':
+            data, labels = preprocess_data(data_dir)
+        else:
+            print('err data')
+        
+        train_loader, val_loader, test_loader = prepare_dataloaders(data, labels, config)
+        
+        
         if os.path.exists(config.MODEL_SAVE_PATH):
             config.MODEL_SAVE_PATH=generate_unique_filename(config.MODEL_SAVE_PATH)
             config.CKPT_SAVE_PATH=generate_unique_filename(config.CKPT_SAVE_PATH)
@@ -179,8 +187,8 @@ def main(args=None):
         
         #### !! epoch +1 but not wanted?! -> model prep problem
         print('Model initialization...')
-
-        #model.apply(init_weights)
+        if config.MODEL_INIT:
+            model.apply(init_weights)   
         history, best_val_loss, best_val_acc = train_model(model, train_loader, val_loader, config, device, optimizer, criterion)
         config.history=history
         
@@ -188,7 +196,33 @@ def main(args=None):
         
         print(f"Best val loss: {best_val_loss:.4f}")
     elif args.mode == 'resume':
-        config.WANDB_PROJECT = 'train'+'_'+config.MODEL
+        select_data = int(input('Select dataset for training.\n1. RAVDESS\n2. MELD\n'))
+        if select_data ==1:
+            config.DATA_NAME='RAVDESS'
+        elif select_data == 2:
+            config.DATA_NAME='MELD'
+        else:
+            print('ERR')
+        
+         #data_dir = load_data(config) 
+        
+         #data_dir = load_data(config) 
+        data_dir = os.path.join(config.DATA_DIR, config.DATA_NAME)
+        #extracted_path = os.path.join(config.DATA_DIR, f"{config.DATA_NAME}.Raw")
+        if config.DATA_NAME=="MELD":
+            text_train_df= pd.read_csv(os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv'))
+            data, labels = preprocess_data_meld(data_dir, text_train_df)
+            dict_label = {v: k for k, v in config.LABELS_EMO_MELD.items()} 
+            labels=[dict_label[val] for val in labels]
+            config.LABELS_EMOTION =config.LABELS_EMO_MELD
+        elif config.DATA_NAME=='RAVDESS':
+            data, labels = preprocess_data(data_dir)
+        else:
+            print('err data')
+        
+        train_loader, val_loader, test_loader = prepare_dataloaders(data, labels, config)
+        
+        config.WANDB_PROJECT = 'train'+'_'+config.MODEL+'_'+config.DATA_NAME
         config.IS_RESUME=True
         models = list_models(config)
         if models:
