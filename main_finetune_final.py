@@ -101,7 +101,10 @@ def collate_fn(batch):
 def train(model, train_dataloader, val_dataloader, config):
     device = config.device
     best_val_f1 = 0
-    log_data = {'train': [], 'val': []}
+    log_data = {
+        'train': {'loss': [], 'accuracy': [], 'f1': []},
+        'val': {'loss': [], 'accuracy': [], 'f1': []}
+    }
     
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr)
@@ -109,9 +112,13 @@ def train(model, train_dataloader, val_dataloader, config):
     path_best = f"{os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)+'_best'}"
     os.makedirs(path_best, exist_ok=True)
     config.path_best=path_best
-    for epoch in tqdm(range(num_epochs)):
+    
+    for epoch in tqdm(range(config.NUM_EPOCHS)):
         model.train()
         total_loss = 0
+        all_preds = []
+        all_labels = []
+        
         for batch in train_dataloader:
             audio_input = batch['audio'].to(device)
             labels = batch['label'].to(device)
@@ -123,27 +130,34 @@ def train(model, train_dataloader, val_dataloader, config):
             optimizer.step()
             optimizer.zero_grad()
             total_loss += loss.item()
+            
+            preds = torch.argmax(outputs.logits, dim=1)
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
 
         avg_train_loss = total_loss / len(train_dataloader)
+        train_accuracy = accuracy_score(all_labels, all_preds)
+        train_f1 = f1_score(all_labels, all_preds, average='weighted')
         
         # Validation
         val_loss, val_accuracy, val_f1 = evaluate(model, val_dataloader, criterion, device)
         
-        print(f"Epoch {epoch+1}/{num_epochs}:")
-        print(f"Train Loss: {avg_train_loss:.4f}")
+        # 로그 데이터 저장
+        log_data['train']['loss'].append(avg_train_loss)
+        log_data['train']['accuracy'].append(train_accuracy)
+        log_data['train']['f1'].append(train_f1)
+        log_data['val']['loss'].append(val_loss)
+        log_data['val']['accuracy'].append(val_accuracy)
+        log_data['val']['f1'].append(val_f1)
+        
+        print(f"Epoch {epoch+1}/{config.NUM_EPOCHS}:")
+        print(f"Train Loss: {avg_train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}, Train F1: {train_f1:.4f}")
         print(f"Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.4f}, Val F1: {val_f1:.4f}")
         
-        # 로그 데이터 저장
-        log_data['train'].append({
-            'epoch': epoch + 1,
-            'loss': avg_train_loss
-        })
-        log_data['val'].append({
-            'epoch': epoch + 1,
-            'loss': val_loss,
-            'accuracy': val_accuracy,
-            'f1': val_f1
-        })
+        config.global_epoch = epoch + 1
+        visualize_results(config, model, val_dataloader, device, log_data, 'val')
+        log_metrics('train', log_data['train'], config.global_epoch)
+        log_metrics('val', log_data['val'], config.global_epoch)
         
         config.global_epoch=epoch+1
         visualize_results(config, model, val_dataloader, device, log_data, 'val')
@@ -224,11 +238,15 @@ config.device = device
 
 ###### I.
 # Fine-tuning 및 성능 기록
+config.model_name= 'wav2vec_I'
 model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
 model.to(device)
 config.lr =1e-4
 # wandb log
 config.WANDB_PROJECT='wav2vec_I_fine_tune'
+config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
+os.makedirs(config.MODEL_DIR, exist_ok=True)
+
 config_wandb = {'lr': config.lr,
                 'n_batch': n_batch
                 }
@@ -253,6 +271,7 @@ wandb.finish()
 ## II. 
 # Fine-tuning 및 성능 기록
 # 새 모델 초기화
+config.model_name= 'wav2vec_II'
 config.lr =5e-5
 config.DROPOUT_RATE=0.4
 
@@ -261,6 +280,9 @@ new_model.to(device)
 
 # wandb log
 config.WANDB_PROJECT='wav2vec_II_classifier'
+config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
+os.makedirs(config.MODEL_DIR, exist_ok=True)
+
 id_wandb = wandb.util.generate_id()
 print(f'Wandb id generated: {id_wandb}')
 config.id_wandb = id_wandb

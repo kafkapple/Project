@@ -3,10 +3,8 @@
 !__init__.py
 !models.py
 /data
-/models
 /wandb
-/wav2vec2_finetuned
-/wav2vec2_emotion_model_2
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

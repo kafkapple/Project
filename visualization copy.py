@@ -16,32 +16,30 @@ import os
     
 def save_and_log_figure(stage, fig, config, name, title):
     """Save figure to file and log to wandb"""
-    path=os.path.join(config.MODEL_DIR, 'results')
-    os.makedirs(path, exist_ok=True)
-    fig.savefig(os.path.join(path, f"{name}_{config.global_epoch}.png"))
+    
+    fig.savefig(os.path.join(config.MODEL_DIR, 'results',f"{config.model_name}_{name}_{config.global_epoch}.png"))
     wandb.log({f"{stage}":{f"{name}": wandb.Image(fig, caption=title)}}, step=config.global_epoch)
     
     
 
-def visualize_results(config, model, data_loader, device, log_data, stage):
+def visualize_results(config, model, data_loader, device, history, stage):
     print('\nVisualization of results starts.\n')
-    if stage in ['train', 'val'] and log_data:
+    if stage in ['train', 'val'] and history:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
         try:
-            epochs = [entry['epoch'] for entry in log_data[stage]]
-            losses = [entry['loss'] for entry in log_data[stage]]
-            accuracies = [entry['accuracy'] for entry in log_data[stage]]
+            epochs = range(1, len(history[stage]['loss']) + 1)
             
-            ax1.plot(epochs, losses, 'bo-')
+            ax1.plot(epochs, history[stage]['loss'], 'bo-')
             ax1.set_title(f'{stage.capitalize()} Loss')
             ax1.set_xlabel('Epochs')
             ax1.set_ylabel('Loss')
             
-            ax2.plot(epochs, accuracies, 'ro-')
+            ax2.plot(epochs, history[stage]['accuracy'], 'ro-')
             ax2.set_title(f'{stage.capitalize()} Accuracy')
             ax2.set_xlabel('Epochs')
             ax2.set_ylabel('Accuracy')
             
+            #plt.tight_layout()
             save_and_log_figure(stage, fig, config, "learning_curves", f"{stage.capitalize()} Learning Curves")
             plt.close(fig)
         except:
@@ -54,14 +52,13 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
     all_embeddings = []
 
     with torch.no_grad():
-        for batch in tqdm(data_loader, desc="Preparing data for Visualizing..."):
-            inputs = batch['audio'].to(device)
-            labels = batch['label']
+        for inputs, labels in tqdm(data_loader, desc="Preparing data for Visualizing..."):
+            inputs = inputs.to(device)
             outputs = model(inputs)
-            _, preds = torch.max(outputs.logits, 1)
+            _, preds = torch.max(outputs, 1)
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.numpy())
-            all_embeddings.extend(outputs.logits.cpu().numpy())
+            all_embeddings.extend(outputs.cpu().numpy())
 
     # Convert lists to numpy arrays
     all_preds = np.array(all_preds)
@@ -80,18 +77,22 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
         indices = np.random.choice(len(all_embeddings), max_samples, replace=False)
         all_embeddings = all_embeddings[indices]
         all_labels = all_labels[indices]
+        
+    embeddings, labels, _ = extract_embeddings_and_predictions(model, data_loader, device)
     
+    print(f"Number of embeddings: {len(embeddings)}")
+    print(f"Number of labels: {len(labels)}")
     try:
-        fig_embd = visualize_embeddings(config, all_embeddings, all_labels)
+        fig_embd = visualize_embeddings(config, embeddings, labels)
     
         save_and_log_figure(stage, fig_embd, config, "embeddings", f"{stage.capitalize()} Embeddings (t-SNE)")
         plt.close(fig_embd)
     except:
         print('No embedding.')    
-
     fig_rsa = perform_rsa(model, data_loader, config.device)
     save_and_log_figure(stage, fig_rsa, config, "Representation_similarity", f"{stage.capitalize()}")
     plt.close(fig_rsa)
+
 def extract_embeddings_and_predictions(model, data_loader, device):
     model.eval()
     all_embeddings = []
@@ -192,10 +193,10 @@ def perform_rsa(model, data_loader, device):
 
     with torch.no_grad():
         for batch in data_loader:
-            inputs = batch['audio'].to(device)
-            batch_labels = batch['label']
+            inputs, batch_labels = batch
+            inputs = inputs.to(device)
             outputs = model(inputs)
-            representations.append(outputs.logits.cpu().numpy())
+            representations.append(outputs.cpu().numpy())
             labels.extend(batch_labels.numpy())
 
     representations = np.vstack(representations)
@@ -220,7 +221,6 @@ def perform_rsa(model, data_loader, device):
 
     plt.suptitle(f"RSA Correlation: {rsa_corr:.2f}", fontsize=16)
     return fig
-
 def plot_learning_curves(history):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
     
