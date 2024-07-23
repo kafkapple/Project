@@ -3,13 +3,8 @@
 !__init__.py
 !models.py
 /data
-<<<<<<< HEAD
-/wandb
-
-=======
 /models
 /wandb
->>>>>>> 1920c464ee0a6ebdfd7a705689f16fa6285938f5
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
