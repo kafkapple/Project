@@ -94,7 +94,7 @@ def main(args=None):
     chk_best_model_info(config)
     
     config.CUR_MODE=args.mode
-    config.WANDB_PROJECT = args.mode+'_'+config.MODEL+config.DATA_NAME
+    config.WANDB_PROJECT = args.mode+'_'+config.MODEL+'_'+config.DATA_NAME
     
     file_name, _ = os.path.splitext(os.path.basename(config.MODEL_SAVE_PATH))
     file_name = file_name.replace('best_model_', '')
@@ -105,10 +105,7 @@ def main(args=None):
     new_path=os.path.join(folder_path, config.model_name) # chk
     config.MODEL_DIR=new_path
     print('Model path New: ', config.MODEL_DIR)
-  
-    os.makedirs(os.path.join(new_path, 'results'), exist_ok=True)
-    os.makedirs(new_path, exist_ok=True)
-    print(new_path)
+
     print('epoch: ',config.global_epoch)
         ### Dataset
     if args.mode =='prep_data':
@@ -196,11 +193,6 @@ def main(args=None):
             
             file_name = file_name.replace('best_model_', '')
             
-            folder_path = os.path.dirname(config.MODEL_SAVE_PATH)
-            config.model_name=file_name
-            new_path=os.path.join(folder_path, config.model_name)
-
-            config.MODEL_DIR=new_path
             os.makedirs(new_path, exist_ok=True)
             os.makedirs(os.path.join(new_path, 'results'), exist_ok=True)
             print(new_path)

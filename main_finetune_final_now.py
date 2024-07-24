@@ -78,33 +78,7 @@ def get_logits_from_output(outputs):
         return outputs.last_hidden_state
     else:
         raise ValueError("Unexpected output format from the model")
-def evaluate(model, dataloader, criterion, device):
-    model.eval()
-    total_loss = 0
-    all_preds = []
-    all_labels = []
     
-    with torch.no_grad():
-        for batch in dataloader:
-            audio_input = batch['audio'].to(device)
-            labels = batch['label'].to(device)
-            
-            outputs = model(audio_input)
-            #print(type(outputs), outputs)
-            logits = get_logits_from_output(outputs)  # 변경된 부분
-            
-            loss = criterion(logits, labels)
-            total_loss += loss.item()
-            
-            preds = torch.argmax(logits, dim=1)
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
-    
-    avg_loss = total_loss / len(dataloader)
-    accuracy = accuracy_score(all_labels, all_preds)
-    f1 = f1_score(all_labels, all_preds, average='weighted')
-    
-    return avg_loss, accuracy, f1
 def save_log(log_data, filename):
     with open(filename, 'w') as f:
         json.dump(log_data, f, indent=4)
@@ -137,11 +111,6 @@ class AudioDataset(Dataset):
         audio = load_and_preprocess_audio(self.file_paths[idx])
         return {"audio": audio, "label": self.labels[idx]}
   
-# def collate_fn(batch):
-#     audio = [item['audio'] for item in batch]
-#     audio = pad_sequence(audio, batch_first=True, padding_value=0.0)
-#     labels = torch.tensor([item['label'] for item in batch], dtype=torch.long)
-#     return {"audio": audio, "label": labels}
 def collate_fn(batch):
     if isinstance(batch[0], dict):
         # 배치 아이템이 딕셔너리 형태일 경우
@@ -162,12 +131,10 @@ def collate_fn(batch):
 def train(model, train_dataloader, val_dataloader, config):
     device = config.device
     best_val_f1 = 0
-    log_data = {
-        'train': {'loss': [], 'accuracy': [], 'f1': []},
-        'val': {'loss': [], 'accuracy': [], 'f1': []}, 'epoch':[]
+    history = {
+        'train': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []},
+        'val': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []}
     }
-    
-    
     optimizer_grouped_parameters = [
     {'params': model.wav2vec2.parameters(), 'lr': 1e-5, 'weight_decay':config.weight_decay},
     {'params': model.classifier.parameters(), 'lr': 1e-3, 'weight_decay':config.weight_decay}
@@ -175,15 +142,15 @@ def train(model, train_dataloader, val_dataloader, config):
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters)
     criterion = nn.CrossEntropyLoss(label_smoothing=config.label_smoothing)
     
-    
     path_best = f"{os.path.join(config.MODEL_BASE_DIR,'finetuned', config.WANDB_PROJECT)+'_best'}"
     os.makedirs(path_best, exist_ok=True)
     config.path_best = path_best
     
     for epoch in tqdm(range(config.NUM_EPOCHS)):
-        if epoch == 5:
+        config.global_epoch+=1
+        if config.global_epoch == 5:
             unfreeze_layers(model, 6)  # 5번째 에폭 후 6개 레이어 동결 해제
-        elif epoch == 10:
+        elif config.global_epoch == 10:
             unfreeze_layers(model, 9)  # 10번째 에폭 후 9개 레이어 동결 해제
         model.train()
         total_loss = 0
@@ -206,58 +173,40 @@ def train(model, train_dataloader, val_dataloader, config):
             preds = torch.argmax(logits, dim=1)
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
-
-        avg_train_loss = total_loss / len(train_dataloader)
-        train_accuracy = accuracy_score(all_labels, all_preds)
-        train_f1 = f1_score(all_labels, all_preds, average='weighted')
         
         # Validation
-        val_loss, val_accuracy, val_f1 = evaluate(model, val_dataloader, criterion, device)
+        train_metrics =  evaluate_model(config, model, train_dataloader, criterion, device)
+        val_metrics =  evaluate_model(config, model, val_dataloader, criterion, device)
+            
+        # Update history
+        for i, metric in enumerate(['loss', 'accuracy', 'precision', 'recall', 'f1']):
+            history['train'][metric].append(val_metrics[i])
+            history['val'][metric].append(val_metrics[i])
+            print(f"Epoch {config.global_epoch}/{config.NUM_EPOCHS}:")
+    
+        print(f"Train - Loss: {train_metrics[0]:.4f}, Accuracy: {train_metrics[1]:.4f}, F1: {train_metrics[4]:.4f}")
+        print(f"Val - Loss: {val_metrics[0]:.4f}, Accuracy: {val_metrics[1]:.4f}, F1: {val_metrics[4]:.4f}")
         
-        # 로그 데이터 저장
-        log_data['train']['loss'].append(avg_train_loss)
-        log_data['train']['accuracy'].append(train_accuracy)
-        log_data['train']['f1'].append(train_f1)
-        log_data['val']['loss'].append(val_loss)
-        log_data['val']['accuracy'].append(val_accuracy)
-        log_data['val']['f1'].append(val_f1)
+        ######
+        #Log metrics chk
+        log_metrics('train', train_metrics, config.global_epoch)
+        log_metrics('val', val_metrics[:5], config.global_epoch)  # val_metrics might have 7 values, we only need first 5
         
-        
-        print(f"Epoch {epoch+1}/{config.NUM_EPOCHS}:")
-        print(f"Train Loss: {avg_train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}, Train F1: {train_f1:.4f}")
-        print(f"Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.4f}, Val F1: {val_f1:.4f}")
-        
-        config.global_epoch = epoch + 1
-        log_data['epoch'].append(config.global_epoch)
-        visualize_results(config, model, val_dataloader, device, log_data, 'val')
-        log_metrics('train', log_data['train'], config.global_epoch)
-        log_metrics('val', log_data['val'], config.global_epoch)
-        
-        config.global_epoch=epoch+1
-        visualize_results(config, model, val_dataloader, device, log_data, 'val')
-        log_metrics('train', log_data['train'], config.global_epoch)
-        log_metrics('val', log_data['val'], config.global_epoch)
+        if config.global_epoch % config.N_STEP_FIG ==0: # visualization for val data
+            try:
+                visualize_results(config, model, val_dataloader, device, history, 'val')
+            except Exception as e:
+                print(f"Error during visualization: {e}")         
         
         # 최고 성능 모델 저장
-        if val_f1 > best_val_f1:
-            best_val_f1 = val_f1
+        if train_metrics[4] > best_val_f1:
+            best_val_f1 = train_metrics[4]
             try:
                 save_model(model, config.path_best)
                 #model.save_pretrained(config.path_best)
             except:
                 print('err.')
-                #torch.save(model.state_dict(), config.path_best)
-        # 주기적으로 모델 저장 (예: 5 에폭마다)
-        if (epoch + 1) % config.N_STEP_FIG == 0:
-            path_epoch = f"{os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)}_epoch_{epoch+1}"
-            os.makedirs(path_epoch, exist_ok=True)
-            try:
-                save_model(model, path_epoch)
-                #model.save_pretrained(path_epoch)
-            except:
-                print('err.')
-               # torch.save(model.state_dict(), path_epoch)
-            
+    
     return model, log_data
 class Wav2VecFeatureExtractor(torch.nn.Module):
     def __init__(self, model_name="facebook/wav2vec2-base"):
@@ -331,7 +280,7 @@ config.device = device
 
 ###### I.
 # Fine-tuning 및 성능 기록
-config.model_name= 'wav2vec_I_0'
+config.model_name= 'wav2vec_finetuned_v0'
 #model = Wav2VecFeatureExtractor()
 
 # model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_dataloader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE, activation=config.ACTIVATION, use_wav2vec=True)
@@ -346,7 +295,7 @@ config.lr =1e-4
 print_model_info(model)
 
 # wandb log
-config.WANDB_PROJECT='wav2vec_I_fine_tune'
+config.WANDB_PROJECT='wav2vec_finetuned'
 config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, 'finetuned',config.WANDB_PROJECT)
 os.makedirs(config.MODEL_DIR, exist_ok=True)
 
@@ -360,10 +309,9 @@ wandb.init(id=id_wandb, project=config.WANDB_PROJECT)#, config=config.CONFIG_DEF
 
 model, log_data = train(model, train_dataloader, val_dataloader, config)
 # 최종 모델 저장
-new_path=os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
-os.makedirs(new_path, exist_ok=True)
+
 try:
-    save_model(model, new_path)
+    save_model(model, config.MODEL_DIR)
     #model.save_pretrained(os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
 except:
     print('save err')

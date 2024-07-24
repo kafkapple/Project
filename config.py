@@ -184,7 +184,7 @@ class Config:
         self.MODEL_SAVE_PATH = os.path.join(self.MODEL_DIR, f'best_model_{self.MODEL}_{self.DATA_NAME}.pth')
         self.CKPT_SAVE_PATH = os.path.join(self.MODEL_DIR, f'checkpoint_{self.MODEL}_{self.DATA_NAME}.pth')
         self.best_model_info_path = os.path.join(self.MODEL_BASE_DIR, 'best_model_info.txt')
-        #self.WANDB_PROJECT = f"{self.PROJECT_DIR}_{self.MODEL}"#_{date_str}"
+        self.WANDB_PROJECT = f"{self.PROJECT_DIR}_{self.MODEL}"#_{date_str}"
 
         print(f'\n\n##### Current Project Location #####\n-Base Directory: {self.BASE_DIR}\n-Data: {self.DATA_DIR}\n-Models: {self.MODEL_BASE_DIR}-Current Model: {self.MODEL_DIR}\n-Current Model name: {self.MODEL_SAVE_PATH}\n\nFigure will be saved per {self.N_STEP_FIG}-step\n')
         
