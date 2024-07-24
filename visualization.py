@@ -23,6 +23,8 @@ from data_utils import get_logits_from_output
 import torch
 import torch.nn.functional as F
 
+
+
 def get_layer_activations(model, inputs, num_layers=5):
     activations = OrderedDict()
     
@@ -62,57 +64,48 @@ def get_layer_activations(model, inputs, num_layers=5):
             processed_activations[name] = torch.cat(acts, dim=0)
 
     print("Captured activations:", list(processed_activations.keys()))
+    print("Processed activations shapes:", {k: v.shape for k, v in processed_activations.items()})
+
+    if len(processed_activations) == 0:
+        print("Warning: No activations captured. Check model structure and hooks.")
 
     # 마지막 num_layers개의 레이어만 선택
     return OrderedDict(list(processed_activations.items())[-num_layers:])
-# def get_layer_activations(model, inputs, num_layers=5):
-#     model.eval()
-#     with torch.no_grad():
-#         if hasattr(model, 'wav2vec'):
-#             wav2vec_output = model.wav2vec(inputs).last_hidden_state
-#             features = torch.mean(wav2vec_output, dim=1)
-#         else:
-#             features = inputs.view(inputs.size(0), -1)
-        
-#         activations = OrderedDict()
-#         activations['input'] = features
-        
-#         x = features
-#         for i, layer in enumerate(['fc1', 'fc2', 'fc3', 'fc4']):
-#             fc_layer = getattr(model.emotion_classifier, layer)
-#             x = fc_layer(x)
-#             if i < 3:  # fc4 이전의 레이어에 대해서만 활성화 함수 적용
-#                 x = model.emotion_classifier.activation(x)
-#                 x = model.emotion_classifier.dropout(x)
-#             activations[f'fc{i+1}'] = x
-    
-#     return OrderedDict(list(activations.items())[-num_layers:])
-import torch
-import torch.nn.functional as F
 
 def compute_layer_similarity(activations):
     layer_names = list(activations.keys())
     n_layers = len(layer_names)
-    similarity_matrix = torch.zeros((n_layers, n_layers))
-    
-    # 각 레이어의 활성화를 정규화된 벡터로 변환
-    normalized_activations = {}
-    for name, act in activations.items():
-        flat_act = act.view(act.size(0), -1)
-        norm = torch.norm(flat_act, p=2, dim=1, keepdim=True)
-        normalized_activations[name] = flat_act / (norm + 1e-8)  # 0으로 나누는 것을 방지
+    similarity_matrix = np.zeros((n_layers, n_layers))
     
     for i in range(n_layers):
         for j in range(n_layers):
-            act_i = normalized_activations[layer_names[i]]
-            act_j = normalized_activations[layer_names[j]]
+            act_i = activations[layer_names[i]]
+            act_j = activations[layer_names[j]]
             
-            # 배치 내 각 샘플 쌍에 대해 코사인 유사도 계산
-            similarity = F.cosine_similarity(act_i.unsqueeze(1), act_j.unsqueeze(0), dim=2)
-            similarity_matrix[i, j] = similarity.mean()
+            print(f"Computing similarity between {layer_names[i]} and {layer_names[j]}")
+            print(f"Shape of act_i: {act_i.shape}, Shape of act_j: {act_j.shape}")
+            
+            # 각 활성화를 2D로 평탄화
+            flat_i = act_i.view(act_i.size(0), -1)
+            flat_j = act_j.view(act_j.size(0), -1)
+            
+            print(f"Shape after flattening - flat_i: {flat_i.shape}, flat_j: {flat_j.shape}")
+            
+            # 정규화
+            norm_i = torch.norm(flat_i, p=2, dim=1, keepdim=True)
+            norm_j = torch.norm(flat_j, p=2, dim=1, keepdim=True)
+            flat_i_normalized = flat_i / (norm_i + 1e-8)
+            flat_j_normalized = flat_j / (norm_j + 1e-8)
+            
+            # 코사인 유사도 계산
+            similarity = torch.mm(flat_i_normalized, flat_j_normalized.t())
+            
+            print(f"Shape of similarity matrix: {similarity.shape}")
+            
+            # 평균 유사도 계산
+            similarity_matrix[i, j] = similarity.mean().item()
     
-    return similarity_matrix.cpu().numpy(), layer_names
-
+    return similarity_matrix, layer_names
 def perform_rsa(model, data_loader, device, num_layers=5):
     model.eval()
     all_activations = None
@@ -132,15 +125,14 @@ def perform_rsa(model, data_loader, device, num_layers=5):
             print("Batch activations keys:", list(batch_activations.keys()))
             print("Batch activations shapes:", {k: v.shape for k, v in batch_activations.items()})
             
-            if all_activations is None:
-                all_activations = batch_activations
-            else:
-                for name in batch_activations:
-                    all_activations[name] = torch.cat([all_activations[name], batch_activations[name]], dim=0)
-            
-            break  # 첫 번째 배치만 사용 (메모리 효율성을 위해)
+            all_activations = batch_activations
+            break  # 첫 번째 배치만 사용
 
-    print("All activations shapes:", {k: v.shape for k, v in all_activations.items()})
+    print("All activations shapes:", {k: v.shape for k, v in all_activations.items()} if all_activations else "None")
+
+    if all_activations is None or len(all_activations) == 0:
+        print("No activations captured. Check if get_layer_activations is working correctly.")
+        return None
 
     similarity_matrix, layer_names = compute_layer_similarity(all_activations)
 
