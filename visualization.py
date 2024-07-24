@@ -46,7 +46,7 @@ def compute_layer_similarity(activations, device):
 import torch
 from collections import OrderedDict
 
-def get_all_layer_activations(model, inputs):
+def get_layer_activations(model, inputs, num_layers_from_end=None):
     activations = OrderedDict()
     handles = []
 
@@ -58,6 +58,8 @@ def get_all_layer_activations(model, inputs):
                 activations[name] = output[0].detach()
             elif hasattr(output, 'last_hidden_state'):
                 activations[name] = output.last_hidden_state.detach()
+            elif isinstance(output, SequenceClassifierOutput):
+                activations[name] = output.logits.detach()
             else:
                 print(f"Warning: Unexpected output type for layer {name}: {type(output)}")
         return hook_fn
@@ -69,31 +71,84 @@ def get_all_layer_activations(model, inputs):
 
         # 모델 실행
         with torch.no_grad():
-            _ = model(inputs)
+            outputs = model(inputs)
+
+        # 모델의 최종 출력 처리
+        if isinstance(outputs, SequenceClassifierOutput):
+            activations['model_output'] = outputs.logits.detach()
+        elif isinstance(outputs, torch.Tensor):
+            activations['model_output'] = outputs.detach()
+        else:
+            print(f"Warning: Unexpected model output type: {type(outputs)}")
 
     finally:
         # 모든 훅 제거
         for handle in handles:
             handle.remove()
 
-    return activations
+    # 끝에서부터 원하는 개수의 레이어만 선택
+    if num_layers_from_end is not None:
+        total_layers = len(activations)
+        start_index = max(0, total_layers - num_layers_from_end)
+        selected_activations = OrderedDict(list(activations.items())[start_index:])
+    else:
+        selected_activations = activations
+
+    return selected_activations
+
+# def get_all_layer_activations(model, inputs):
+#     activations = OrderedDict()
+#     handles = []
+
+#     def hook(name):
+#         def hook_fn(module, input, output):
+#             if isinstance(output, torch.Tensor):
+#                 activations[name] = output.detach()
+#             elif isinstance(output, tuple) and isinstance(output[0], torch.Tensor):
+#                 activations[name] = output[0].detach()
+#             elif hasattr(output, 'last_hidden_state'):
+#                 activations[name] = output.last_hidden_state.detach()
+#             elif isinstance(output, SequenceClassifierOutput):
+#                 activations[name] = output.logits.detach()
+#             else:
+#                 print(f"Warning: Unexpected output type for layer {name}: {type(output)}")
+#         return hook_fn
+
+#     try:
+#         # 모든 모듈에 대해 훅 등록
+#         for name, module in model.named_modules():
+#             handles.append(module.register_forward_hook(hook(name)))
+
+#         # 모델 실행
+#         with torch.no_grad():
+#             outputs = model(inputs)
+
+#         # 모델의 최종 출력 처리
+#         if isinstance(outputs, SequenceClassifierOutput):
+#             activations['model_output'] = outputs.logits.detach()
+#         elif isinstance(outputs, torch.Tensor):
+#             activations['model_output'] = outputs.detach()
+#         else:
+#             print(f"Warning: Unexpected model output type: {type(outputs)}")
+
+#     finally:
+#         # 모든 훅 제거
+#         for handle in handles:
+#             handle.remove()
+
+#     return activations
 
 def perform_rsa(model, data_loader, device):
     model.eval()
     all_activations = {}
+    num_layers_from_end = 5
 
     with torch.no_grad():
         for batch in tqdm(data_loader, desc="Collecting activations"):
             inputs = batch['audio'].to(device)
-            batch_activations = get_all_layer_activations(model, inputs)
-            for name, activation in batch_activations.items():
-                if isinstance(activation, torch.Tensor):
-                    if name not in all_activations:
-                        all_activations[name] = []
-                    all_activations[name].append(activation.cpu())
-                else:
-                    print(f"Warning: Skipping non-tensor activation for layer {name}")
-
+            batch_activations = get_layer_activations(model, inputs, num_layers_from_end)
+            all_activations.append(batch_activations)
+      
     # 모든 배치의 활성화를 결합
     combined_activations = {name: torch.cat(acts, dim=0) for name, acts in all_activations.items() if acts}
     
@@ -130,10 +185,10 @@ def compute_similarity(act1, act2):
     
 def save_and_log_figure(stage, fig, config, name, title):
     """Save figure to file and log to wandb"""
-    path=os.path.join(config.MODEL_DIR, 'results')
-    os.makedirs(path, exist_ok=True)
-    fig.savefig(os.path.join(path, f"{name}_{config.global_epoch}.png"))
-    wandb.log({stage:{f"{name}": wandb.Image(fig, caption=title)}}, step=config.global_epoch)
+    fig_path = os.path.join(config.MODEL_RESULTS, f"{name}_{config.global_epoch}.png")
+    fig.savefig(fig_path)
+    wandb.log({stage:{f"{name}": wandb.Image(fig_path, caption=title)}}, step=config.global_epoch)
+    plt.close(fig)
     
 def visualize_results(config, model, data_loader, device, log_data, stage):
     print('\nVisualization of results starts.\n')
@@ -154,54 +209,36 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
                 inputs = inputs.to(device)
                 labels = labels.to(device)  # labels도 device로 이동
             outputs = model(inputs)
+            
+            #activations = get_all_layer_activations(model, inputs)
             try:
                 logits = get_logits_from_output(outputs)
             except Exception as e:
                 print(f'Error in get_logits_from_output during evaluation: {e}')
-                logits = outputs  # 오류 발생 시 원래
+                logits = outputs  #
             
-                
-            # if isinstance(outputs, (tuple, list)):
-            #     logits = outputs[0]
-            # # outputs가 딕셔너리인 경우
-            # elif isinstance(outputs, dict):
-            #     logits = outputs.get('logits', outputs.get('last_hidden_state', None))
-            # # outputs가 단일 텐서인 경우
-            # elif isinstance(outputs, torch.Tensor):
-            #     logits = outputs
-            # else:
-            #     raise ValueError(f"Unexpected output type from model: {type(outputs)}")
-     
             if logits is None:
                 raise ValueError("Unable to extract logits from model output")
             
             # Penultimate features 추출 (가능한 경우)
+                       
             if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
                 penultimate_features = outputs.hidden_states[-2]
+            elif hasattr(model, 'get_penultimate_features'):
+                penultimate_features = model.get_penultimate_features()
             else:
-                try:
-                    penultimate_features = model.get_penultimate_features()
-                except:
-                    print("Warning: Hidden states not available. Using logits as embeddings.")
-                    penultimate_features = logits
-        
-                # try:
-            #         penultimate_features = outputs.hidden_states[-2] # penultimate layer
-            #     except:
-            #         print('no hidden access')
-            # try:
-            #     logits = get_logits_from_output(outputs)
-            # except Exception as e:
-            #     print(f'Error in get_logits_from_output during visualization: {e}')
-            #     logits = outputs  # 오류 발생 시 원래 출력을 사용
+                print("Warning: Hidden states not available. Using logits as embeddings.")
+                penultimate_features = logits
             
+
             _, preds = torch.max(logits, 1) 
-            #_, preds = torch.max(outputs.logits, 1)
             
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
+            if len(penultimate_features.shape) > 2:
+                penultimate_features = penultimate_features.mean(dim=1)  # 시퀀스 차원에 대해 평균 계산
             all_embeddings.extend(penultimate_features.cpu().numpy())
-
+            
     # Convert lists to numpy arrays
     all_preds = np.array(all_preds)
     all_labels = np.array(all_labels)
@@ -210,7 +247,6 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
     # Confusion Matrix
     fig_cm = plot_confusion_matrix(all_labels, all_preds, config.LABELS_EMOTION)
     save_and_log_figure(stage, fig_cm, config, "confusion_matrix", f"{stage} Confusion Matrix")
-    plt.close(fig_cm)
 
     # Embeddings visualization
     max_samples = config.N_EMBEDDINGS # to show
@@ -224,18 +260,18 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
         fig_embd = visualize_embeddings(config, all_embeddings, all_labels)
     
         save_and_log_figure(stage, fig_embd, config, "embeddings", f"{stage.capitalize()} Embeddings (t-SNE)")
-        plt.close(fig_embd)
     except:
         print('No embedding.')    
-
-    fig_rsa = perform_rsa(model, data_loader, config.device)
-    save_and_log_figure(stage, fig_rsa, config, "Representation_similarity", f"{stage.capitalize()}")
-    plt.close(fig_rsa)
-    
+    try:
+        fig_rsa = perform_rsa(model, data_loader, config.device)
+        save_and_log_figure(stage, fig_rsa, config, "Representation_similarity", f"{stage.capitalize()}")
+        plt.close(fig_rsa)
+    except:
+        print('RSA error')
     if stage in ['train', 'val'] and log_data:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
         try:
-            epochs = [entry['epoch'] for entry in log_data[stage]]
+            epochs = [entry['epoch'] for entry in log_data]
             losses = [entry['loss'] for entry in log_data[stage]]
             accuracies = [entry['accuracy'] for entry in log_data[stage]]
             
@@ -250,7 +286,6 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
             ax2.set_ylabel('Accuracy')
             
             save_and_log_figure(stage, fig, config, "learning_curves", f"{stage.capitalize()} Learning Curves")
-            plt.close(fig)
         except:
             print('Err. no learning curve.')
     
@@ -307,8 +342,9 @@ def plot_learning_curves(config):
     ax2.legend()
     
     #plt.tight_layout()
-    plt.savefig(f"{config.MODEL_DIR}/learning_curves.png")
-    wandb.log({"learning_curves": wandb.Image(plt)})
+    img_path=f"{config.MODEL_RESULTS}/learning_curves_{config.global_epoch}.png"
+    plt.savefig(img_path)
+    wandb.log({"learning_curves": wandb.Image(img_path)})
     
 def plot_confusion_matrix(labels, preds, labels_emotion, normalize=True):
     cm = confusion_matrix(labels, preds)
@@ -324,8 +360,6 @@ def plot_confusion_matrix(labels, preds, labels_emotion, normalize=True):
     ax.set_ylabel('True')
     ax.set_title('Confusion Matrix')
     
-    # wandb.log({"confusion_matrix": wandb.Image(fig)})
-    #plt.close(fig)
     return fig
 
 def plot_learning_curves(history):
