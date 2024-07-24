@@ -4,175 +4,112 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.metrics import confusion_matrix
 from sklearn.manifold import TSNE
-import wandb
-import torch
+
+from scipy.spatial.distance import cosine
 from scipy.stats import spearmanr
 import pandas as pd
 from tqdm import tqdm
 import os
-from scipy.spatial.distance import cosine
-import torch
+
+import wandb
+
 from collections import OrderedDict
+
 from transformers.modeling_outputs import SequenceClassifierOutput
 import torch.nn.functional as F
+import torch
 
 from data_utils import get_logits_from_output
+import torch
+import torch.nn.functional as F
+from collections import OrderedDict
 
-def compute_layer_similarity(activations, device):
-    n_layers = len(activations)
-    similarity_matrix = torch.zeros((n_layers, n_layers), device=device)
-    
-    for i in range(n_layers):
-        for j in range(n_layers):
-            flattened_i = activations[i].view(activations[i].size(0), -1)
-            flattened_j = activations[j].view(activations[j].size(0), -1)
-            
-            # 두 텐서의 차원을 맞추기 위해 더 작은 차원을 가진 텐서에 맞춰 조정
-            min_dim = min(flattened_i.size(1), flattened_j.size(1))
-            flattened_i = flattened_i[:, :min_dim]
-            flattened_j = flattened_j[:, :min_dim]
-            
-            # 각 샘플 쌍에 대해 cosine similarity 계산
-            cos_sim = F.cosine_similarity(flattened_i.unsqueeze(1), flattened_j.unsqueeze(0), dim=2)
-            # 모든 샘플 쌍의 평균 similarity
-            similarity_matrix[i, j] = cos_sim.mean()
-    
-    return similarity_matrix.cpu().numpy()
-      # flattened_i.unsqueeze(1)의 결과 shape: (batch_size, 1, flattened_features)
-            #flattened_j.unsqueeze(0)의 결과 shape: (1, batch_size, flattened_features)
-            #브로드캐스팅PyTorch는 이 두 텐서를 자동으로 브로드캐스팅하여 다음과 같은 형태로 확장합니다: 두 텐서 모두 (batch_size, batch_size, flattened_features) 형태로 확장
-            #입력2: (batch_size, batch_size, flattened_features)
-            #dim=2: 마지막 차원(특성 차원)을 따라 코사인 유사도를 계산합니다.
-
-
-def get_layer_activations(model, inputs, num_layers_from_end=None):
+def get_layer_activations(model, inputs, num_layers=5):
     activations = OrderedDict()
-    handles = []
-
+    
     def hook(name):
         def hook_fn(module, input, output):
             if isinstance(output, torch.Tensor):
                 activations[name] = output.detach()
             elif isinstance(output, tuple) and isinstance(output[0], torch.Tensor):
                 activations[name] = output[0].detach()
-            elif hasattr(output, 'last_hidden_state'):
-                activations[name] = output.last_hidden_state.detach()
-            elif isinstance(output, SequenceClassifierOutput):
-                activations[name] = output.logits.detach()
-            else:
-                print(f"Warning: Unexpected output type for layer {name}: {type(output)}")
         return hook_fn
 
-    try:
-        # 모든 모듈에 대해 후크 등록
-        for name, module in model.named_modules():
-            handles.append(module.register_forward_hook(hook(name)))
-
-        # 모델 실행
-        with torch.no_grad():
-            outputs = model(inputs)
-
-        # 모델의 최종 출력 처리
-        if isinstance(outputs, SequenceClassifierOutput):
-            activations['model_output'] = outputs.logits.detach()
-        elif isinstance(outputs, torch.Tensor):
-            activations['model_output'] = outputs.detach()
-        else:
-            print(f"Warning: Unexpected model output type: {type(outputs)}")
-
-    finally:
-        # 모든 후크 제거
-        for handle in handles:
-            handle.remove()
-
-    # 끝에서부터 원하는 개수의 레이어만 선택
-    if num_layers_from_end is not None:
-        total_layers = len(activations)
-        start_index = max(0, total_layers - num_layers_from_end)
-        selected_activations = OrderedDict(list(activations.items())[start_index:])
-    else:
-        selected_activations = activations
-
-    return selected_activations
-
-def perform_rsa(model, data_loader, device):
-    model.eval()
-    all_activations = []
-    num_layers_from_end = 5
+    hooks = []
+    # 모든 named_modules에 대해 훅 등록
+    if hasattr(model, 'wav2vec'):
+        for name, module in model.wav2vec.named_modules():
+            if isinstance(module, (torch.nn.Linear, torch.nn.Conv1d)):
+                hooks.append(module.register_forward_hook(hook(f'wav2vec_{name}')))
+    for name, module in model.named_modules():
+        if isinstance(module, (torch.nn.Linear, torch.nn.Conv1d, torch.nn.Conv2d)):
+            hooks.append(module.register_forward_hook(hook(name)))
 
     with torch.no_grad():
-        for batch in tqdm(data_loader, desc="Collecting activations"):
+        _ = model(inputs)
+
+    for h in hooks:
+        h.remove()
+
+    # 마지막 num_layers개의 레이어만 선택
+    return OrderedDict(list(activations.items())[-num_layers:])
+
+def compute_layer_similarity(activations):
+    layer_names = list(activations.keys())
+    n_layers = len(layer_names)
+    similarity_matrix = torch.zeros((n_layers, n_layers))
+    
+    for i in range(n_layers):
+        for j in range(n_layers):
+            act_i = activations[layer_names[i]]
+            act_j = activations[layer_names[j]]
+            
+            flat_i = act_i.view(act_i.size(0), -1)
+            flat_j = act_j.view(act_j.size(0), -1)
+            
+            cos_sim = F.cosine_similarity(flat_i.unsqueeze(1), flat_j.unsqueeze(0), dim=2)
+            similarity_matrix[i, j] = cos_sim.mean()
+    
+    return similarity_matrix.numpy(), layer_names
+
+def perform_rsa(model, data_loader, device, num_layers=5):
+    model.eval()
+    all_activations = None
+
+    with torch.no_grad():
+        for batch in data_loader:
+            # 입력 차원 조정
+            if inputs.dim() == 4:
+                inputs = inputs.squeeze(2)
+            if inputs.dim() == 3:
+                inputs = inputs.squeeze(1)
+            print(batch.keys())  # 배치의 구조 확인
+            print(batch['audio'].shape)  # 오디오 데이터의 형태 확인
+           # break
             inputs = batch['audio'].to(device)
-            batch_activations = get_layer_activations(model, inputs, num_layers_from_end)
-            all_activations.append(batch_activations)
+            batch_activations = get_layer_activations(model, inputs, num_layers)
+            
+            if all_activations is None:
+                all_activations = {name: [] for name in batch_activations.keys()}
+            
+            for name, act in batch_activations.items():
+                all_activations[name].append(act)
+            break  # 첫 번째 배치만 사용 (메모리 효율성을 위해)
 
     # 모든 배치의 활성화를 결합
-    combined_activations = {name: torch.cat([b[name] for b in all_activations], dim=0) for name in all_activations[0]}
+    combined_activations = {name: torch.cat(acts, dim=0) for name, acts in all_activations.items()}
 
-    # combined_activations의 형태 확인
-    for name, act in combined_activations.items():
-        print(f"Layer {name} activation shape: {act.shape}")
+    similarity_matrix, layer_names = compute_layer_similarity(combined_activations)
 
-    layer_names = list(combined_activations.keys())
-    activations_list = [combined_activations[name] for name in layer_names]
-
-    # compute_layer_similarity 함수 사용
-    similarity_matrix = compute_layer_similarity(activations_list, device)
-
-    # 시각화
     plt.figure(figsize=(12, 10))
-    sns.heatmap(similarity_matrix, xticklabels=layer_names, yticklabels=layer_names, cmap='coolwarm')
+    sns.heatmap(similarity_matrix, annot=True, cmap='coolwarm', 
+                xticklabels=layer_names, yticklabels=layer_names)
     plt.title("Layer-wise Representation Similarity Analysis")
-    plt.xlabel("Layers")
-    plt.ylabel("Layers")
+    plt.xticks(rotation=45, ha='right')
+    plt.yticks(rotation=45)
     plt.tight_layout()
 
     return plt.gcf()
-
-def perform_rsa(model, data_loader, device):
-    model.eval()
-    all_activations = {}
-    num_layers_from_end = 5
-
-    with torch.no_grad():
-        for batch in tqdm(data_loader, desc="Collecting activations"):
-            inputs = batch['audio'].to(device)
-            batch_activations = get_layer_activations(model, inputs, num_layers_from_end)
-            all_activations.append(batch_activations)
-      
-    # 모든 배치의 활성화를 결합
-    combined_activations = {name: torch.cat(acts, dim=0) for name, acts in all_activations.items() if acts}
-    
-    # combined_activations의 형태 확인
-    for name, act in combined_activations.items():
-        print(f"Layer {name} activation shape: {act.shape}")
-
-    layer_names = list(combined_activations.keys())
-    activations_list = [combined_activations[name] for name in layer_names]
-
-    # compute_layer_similarity 함수 사용
-    similarity_matrix = compute_layer_similarity(activations_list, device)
-
-    # 시각화
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(similarity_matrix, xticklabels=layer_names, yticklabels=layer_names, cmap='coolwarm')
-    plt.title("Layer-wise Representation Similarity Analysis")
-    plt.xlabel("Layers")
-    plt.ylabel("Layers")
-    plt.tight_layout()
-    
-    return plt.gcf()
-
-def compute_similarity(act1, act2):
-    # 활성화를 2D로 펼치기
-    flat1 = act1.view(act1.size(0), -1)
-    flat2 = act2.view(act2.size(0), -1)
-    
-    # 코사인 유사도 계산
-    similarity = F.cosine_similarity(flat1.unsqueeze(1), flat2.unsqueeze(0), dim=2)
-    
-    # 평균 유사도 반환
-    return similarity.mean().item()
     
 def save_and_log_figure(stage, fig, config, name, title):
     """Save figure to file and log to wandb"""

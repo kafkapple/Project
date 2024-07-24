@@ -10,11 +10,9 @@ import random
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from glob import glob
 
+from transformers import Wav2Vec2Model
 from train_utils import evaluate_model
-from transformers import Wav2Vec2Model
-import torch
-import torch.nn as nn
-from transformers import Wav2Vec2Model
+
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -263,9 +261,7 @@ def get_model(config, train_loader):
 
 #     def load(self, path):
 #         self.model = joblib.load(path)
-import torch
-import torch.nn as nn
-from transformers import Wav2Vec2Model
+
 
 class EmotionRecognitionBase(nn.Module):
     def __init__(self, input_size, num_classes, dropout_rate, activation):
@@ -320,7 +316,7 @@ class EmotionRecognitionWithWav2Vec(nn.Module):
                 input_values = input_values.squeeze(2)
             if input_values.dim() == 3:
                 input_values = input_values.squeeze(1)
-            wav2vec_outputs = self.wav2vec(input_values).last_hidden_state
+            wav2vec_outputs = self.wav2vec(input_values, output_hidden_states=True).last_hidden_state
             features = torch.mean(wav2vec_outputs, dim=1)
         else:
             features = input_values.view(input_values.size(0), -1)

@@ -195,9 +195,7 @@ def main(args=None):
             
             os.makedirs(new_path, exist_ok=True)
             os.makedirs(os.path.join(new_path, 'results'), exist_ok=True)
-            print(new_path)
-
-            
+            print(new_path) 
         config.NUM_EPOCHS = int(input("Number of epoch for training: "))
         
         model, optimizer, criterion, device = prep_model(config, train_loader, is_sweep=False)
