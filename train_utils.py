@@ -100,8 +100,12 @@ def train_model(model, train_loader, val_loader, config, device, optimizer, crit
         log_metrics('train', train_metrics, global_epoch)
         log_metrics('val', val_metrics[:5], global_epoch)  # val_metrics might have 7 values, we only need first 5
         
-        if global_epoch % config.N_STEP_FIG ==0: # visualization for val data 
-            visualize_results(config, model, val_loader, device, history, 'val')
+        if global_epoch % config.N_STEP_FIG ==0: # visualization for val data
+            try:
+                visualize_results(config, model, val_loader, device, history, 'val')
+            except Exception as e:
+                print(f"Error during visualization: {e}") 
+            
             
         if config.SCHEDULER:
             scheduler.step()#val_metrics[0]) #[0] val loss
@@ -165,7 +169,7 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
                     print(f"{name} - mean: {module.running_mean.mean().item():.4f}, var: {module.running_var.mean().item():.4f}")
         
         optimizer.zero_grad()
-        outputs, _ = model(features)
+        outputs = model(features)
         try:
             logits = get_logits_from_output(outputs)
         except Exception as e:
@@ -219,7 +223,7 @@ def evaluate_model(config, model, dataloader, criterion, device):
                 print(f"Features shape: {features.shape}")
                 print(f"Labels shape: {batch_labels.shape}")
         # for features, batch_labels in tqdm(dataloader, desc="Evaluating"):
-            outputs, _ = model(features)
+            outputs= model(features)
             try:
                 logits = get_logits_from_output(outputs)
             except Exception as e:

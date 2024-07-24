@@ -285,6 +285,52 @@ class EmotionRecognitionBase(nn.Module):
         else:
             raise ValueError(f"Unknown activation function: {activation}")
 
+
+class EmotionRecognitionWithWav2Vec(nn.Module):
+    def __init__(self, num_classes, config, dropout_rate=0.5, activation='relu', use_wav2vec=True, input_size=None):
+        super().__init__()
+        
+        self.use_wav2vec = use_wav2vec
+        self.config = config
+        self.penultimate_features = None
+        
+        if use_wav2vec:
+            self.wav2vec = Wav2Vec2Model.from_pretrained(self.config.path_pretrained)
+            self.wav2vec.config.mask_time_length = config.mask_time_length
+            wav2vec_output_size = self.wav2vec.config.hidden_size
+        else:
+            wav2vec_output_size = input_size
+        
+        self.emotion_classifier = EmotionRecognitionModel_v2(
+            input_size=wav2vec_output_size,
+            num_classes=num_classes,
+            dropout_rate=dropout_rate,
+            activation=activation
+        )
+        
+        # Register hook to capture penultimate layer output
+        self.emotion_classifier.fc3.register_forward_hook(self._hook_fn)
+
+    def _hook_fn(self, module, input, output):
+        self.penultimate_features = output
+
+    def forward(self, input_values):
+        if self.use_wav2vec:
+            if input_values.dim() == 4:
+                input_values = input_values.squeeze(2)
+            if input_values.dim() == 3:
+                input_values = input_values.squeeze(1)
+            wav2vec_outputs = self.wav2vec(input_values).last_hidden_state
+            features = torch.mean(wav2vec_outputs, dim=1)
+        else:
+            features = input_values.view(input_values.size(0), -1)
+        
+        emotion_logits = self.emotion_classifier(features)
+        return emotion_logits
+
+    def get_penultimate_features(self):
+        return self.penultimate_features
+
 class EmotionRecognitionModel_v2(EmotionRecognitionBase):
     def __init__(self, input_size, num_classes, dropout_rate, activation):
         super().__init__(input_size, num_classes, dropout_rate, activation)
@@ -298,16 +344,37 @@ class EmotionRecognitionModel_v2(EmotionRecognitionBase):
         self.fc4 = nn.Linear(64, num_classes)
 
     def forward(self, x):
-        #x = x.squeeze(1)  # Squeeze the input to remove dimensions of size 1
-        x = x.view(x.size(0), -1)  # Flatten the input if necessary
         x = self.activation(self.bn1(self.fc1(x)))
         x = self.dropout(x)
         x = self.activation(self.bn2(self.fc2(x)))
         x = self.dropout(x)
         x = self.activation(self.bn3(self.fc3(x)))
         x = self.dropout(x)
-        x = self.fc4(x)
-        return x
+        return self.fc4(x)
+
+# class EmotionRecognitionModel_v2(EmotionRecognitionBase):
+#     def __init__(self, input_size, num_classes, dropout_rate, activation):
+#         super().__init__(input_size, num_classes, dropout_rate, activation)
+#         momentum = 0.01
+#         self.fc1 = nn.Linear(input_size, 256)
+#         self.bn1 = nn.BatchNorm1d(256, momentum=momentum)
+#         self.fc2 = nn.Linear(256, 128)
+#         self.bn2 = nn.BatchNorm1d(128, momentum=momentum)
+#         self.fc3 = nn.Linear(128, 64)
+#         self.bn3 = nn.BatchNorm1d(64, momentum=momentum)
+#         self.fc4 = nn.Linear(64, num_classes)
+
+#     def forward(self, x):
+#         #x = x.squeeze(1)  # Squeeze the input to remove dimensions of size 1
+#         x = x.view(x.size(0), -1)  # Flatten the input if necessary
+#         x = self.activation(self.bn1(self.fc1(x)))
+#         x = self.dropout(x)
+#         x = self.activation(self.bn2(self.fc2(x)))
+#         x = self.dropout(x)
+#         x = self.activation(self.bn3(self.fc3(x)))
+#         x = self.dropout(x)
+#         x = self.fc4(x)
+#         return x
 
 # class EmotionRecognitionWithWav2Vec(nn.Module):
 #     def __init__(self, num_classes, config, dropout_rate=0.5, activation='relu', use_wav2vec=True, input_size=None):
@@ -358,50 +425,50 @@ class EmotionRecognitionModel_v2(EmotionRecognitionBase):
         
 #         return emotion_logits
 
-class EmotionRecognitionWithWav2Vec(nn.Module):
-    def __init__(self, num_classes, config, dropout_rate=0.5, activation='relu', use_wav2vec=True, input_size=None):
-        super().__init__()
+# class EmotionRecognitionWithWav2Vec(nn.Module):
+#     def __init__(self, num_classes, config, dropout_rate=0.5, activation='relu', use_wav2vec=True, input_size=None):
+#         super().__init__()
         
-        self.use_wav2vec = use_wav2vec
-        self.config = config
+#         self.use_wav2vec = use_wav2vec
+#         self.config = config
         
-        if use_wav2vec:
-            self.wav2vec = Wav2Vec2Model.from_pretrained(self.config.path_pretrained)
-            self.wav2vec.config.mask_time_length = config.mask_time_length
-            wav2vec_output_size = self.wav2vec.config.hidden_size
-        else:
-            wav2vec_output_size = input_size
+#         if use_wav2vec:
+#             self.wav2vec = Wav2Vec2Model.from_pretrained(self.config.path_pretrained)
+#             self.wav2vec.config.mask_time_length = config.mask_time_length
+#             wav2vec_output_size = self.wav2vec.config.hidden_size
+#         else:
+#             wav2vec_output_size = input_size
         
-        self.emotion_classifier = EmotionRecognitionModel_v2(
-            input_size=wav2vec_output_size,
-            num_classes=num_classes,
-            dropout_rate=dropout_rate,
-            activation=activation
-        )
+#         self.emotion_classifier = EmotionRecognitionModel_v2(
+#             input_size=wav2vec_output_size,
+#             num_classes=num_classes,
+#             dropout_rate=dropout_rate,
+#             activation=activation
+#         )
         
-    def forward(self, input_values):
-        if self.use_wav2vec:
-            if self.config.VISUALIZE:
-                print(f"Input shape before processing: {input_values.shape}")
-            if input_values.dim() == 4:
-                input_values = input_values.squeeze(2)
-            if input_values.dim() == 3:
-                input_values = input_values.squeeze(1)
-            if self.config.VISUALIZE:
-                print(f"Input shape after processing: {input_values.shape}")
-            wav2vec_outputs = self.wav2vec(input_values).last_hidden_state
-            features = torch.mean(wav2vec_outputs, dim=1)
-        else:
-            features = input_values.view(input_values.size(0), -1)
+#     def forward(self, input_values):
+#         if self.use_wav2vec:
+#             if self.config.VISUALIZE:
+#                 print(f"Input shape before processing: {input_values.shape}")
+#             if input_values.dim() == 4:
+#                 input_values = input_values.squeeze(2)
+#             if input_values.dim() == 3:
+#                 input_values = input_values.squeeze(1)
+#             if self.config.VISUALIZE:
+#                 print(f"Input shape after processing: {input_values.shape}")
+#             wav2vec_outputs = self.wav2vec(input_values).last_hidden_state
+#             features = torch.mean(wav2vec_outputs, dim=1)
+#         else:
+#             features = input_values.view(input_values.size(0), -1)
         
-        # EmotionRecognitionModel_v2의 각 층을 통과
-        x = self.emotion_classifier.activation(self.emotion_classifier.bn1(self.emotion_classifier.fc1(features)))
-        x = self.emotion_classifier.dropout(x)
-        x = self.emotion_classifier.activation(self.emotion_classifier.bn2(self.emotion_classifier.fc2(x)))
-        x = self.emotion_classifier.dropout(x)
-        x = self.emotion_classifier.activation(self.emotion_classifier.bn3(self.emotion_classifier.fc3(x)))
-        penultimate_features = self.emotion_classifier.dropout(x) # penultimate_features는 마지막 fully connected layer (fc4) 직전의 특징
+#         # EmotionRecognitionModel_v2의 각 층을 통과
+#         x = self.emotion_classifier.activation(self.emotion_classifier.bn1(self.emotion_classifier.fc1(features)))
+#         x = self.emotion_classifier.dropout(x)
+#         x = self.emotion_classifier.activation(self.emotion_classifier.bn2(self.emotion_classifier.fc2(x)))
+#         x = self.emotion_classifier.dropout(x)
+#         x = self.emotion_classifier.activation(self.emotion_classifier.bn3(self.emotion_classifier.fc3(x)))
+#         penultimate_features = self.emotion_classifier.dropout(x) # penultimate_features는 마지막 fully connected layer (fc4) 직전의 특징
         
-        emotion_logits = self.emotion_classifier.fc4(penultimate_features)
+#         emotion_logits = self.emotion_classifier.fc4(penultimate_features)
         
-        return emotion_logits, penultimate_features
+#         return emotion_logits, penultimate_features

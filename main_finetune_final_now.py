@@ -336,7 +336,7 @@ config.model_name= 'wav2vec_I_0'
 
 # model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_dataloader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE, activation=config.ACTIVATION, use_wav2vec=True)
 
-model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
+model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels, output_hidden_states=True)
 model.to(device)
 for param in model.parameters():
     param.requires_grad = False

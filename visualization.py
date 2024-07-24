@@ -43,27 +43,39 @@ def compute_layer_similarity(activations, device):
             #dim=2: 마지막 차원(특성 차원)을 따라 코사인 유사도를 계산합니다.
 
 
-def get_layer_activations(model, inputs):
-    activations = {}
+import torch
+from collections import OrderedDict
+
+def get_all_layer_activations(model, inputs):
+    activations = OrderedDict()
+    handles = []
+
     def hook(name):
         def hook_fn(module, input, output):
             if isinstance(output, torch.Tensor):
                 activations[name] = output.detach()
+            elif isinstance(output, tuple) and isinstance(output[0], torch.Tensor):
+                activations[name] = output[0].detach()
             elif hasattr(output, 'last_hidden_state'):
                 activations[name] = output.last_hidden_state.detach()
             else:
                 print(f"Warning: Unexpected output type for layer {name}: {type(output)}")
         return hook_fn
-    
-    handles = []
-    for name, module in model.named_modules():
-        handles.append(module.register_forward_hook(hook(name)))
-    
-    _ = model(inputs)
-    
-    for handle in handles:
-        handle.remove()
-    
+
+    try:
+        # 모든 모듈에 대해 훅 등록
+        for name, module in model.named_modules():
+            handles.append(module.register_forward_hook(hook(name)))
+
+        # 모델 실행
+        with torch.no_grad():
+            _ = model(inputs)
+
+    finally:
+        # 모든 훅 제거
+        for handle in handles:
+            handle.remove()
+
     return activations
 
 def perform_rsa(model, data_loader, device):
@@ -73,7 +85,7 @@ def perform_rsa(model, data_loader, device):
     with torch.no_grad():
         for batch in tqdm(data_loader, desc="Collecting activations"):
             inputs = batch['audio'].to(device)
-            batch_activations = get_layer_activations(model, inputs)
+            batch_activations = get_all_layer_activations(model, inputs)
             for name, activation in batch_activations.items():
                 if isinstance(activation, torch.Tensor):
                     if name not in all_activations:
@@ -141,18 +153,48 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
                 inputs, labels = batch
                 inputs = inputs.to(device)
                 labels = labels.to(device)  # labels도 device로 이동
-            try:
-                outputs, penultimate_features = model(inputs)
-            except:
-                outputs = model(inputs)
-                penultimate_features = outputs.hidden_states[-2] # penultimate layer
-                
+            outputs = model(inputs)
             try:
                 logits = get_logits_from_output(outputs)
             except Exception as e:
-                print(f'Error in get_logits_from_output during visualization: {e}')
-                logits = outputs  # 오류 발생 시 원래 출력을 사용
+                print(f'Error in get_logits_from_output during evaluation: {e}')
+                logits = outputs  # 오류 발생 시 원래
+            
                 
+            # if isinstance(outputs, (tuple, list)):
+            #     logits = outputs[0]
+            # # outputs가 딕셔너리인 경우
+            # elif isinstance(outputs, dict):
+            #     logits = outputs.get('logits', outputs.get('last_hidden_state', None))
+            # # outputs가 단일 텐서인 경우
+            # elif isinstance(outputs, torch.Tensor):
+            #     logits = outputs
+            # else:
+            #     raise ValueError(f"Unexpected output type from model: {type(outputs)}")
+     
+            if logits is None:
+                raise ValueError("Unable to extract logits from model output")
+            
+            # Penultimate features 추출 (가능한 경우)
+            if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
+                penultimate_features = outputs.hidden_states[-2]
+            else:
+                try:
+                    penultimate_features = model.get_penultimate_features()
+                except:
+                    print("Warning: Hidden states not available. Using logits as embeddings.")
+                    penultimate_features = logits
+        
+                # try:
+            #         penultimate_features = outputs.hidden_states[-2] # penultimate layer
+            #     except:
+            #         print('no hidden access')
+            # try:
+            #     logits = get_logits_from_output(outputs)
+            # except Exception as e:
+            #     print(f'Error in get_logits_from_output during visualization: {e}')
+            #     logits = outputs  # 오류 발생 시 원래 출력을 사용
+            
             _, preds = torch.max(logits, 1) 
             #_, preds = torch.max(outputs.logits, 1)
             
@@ -344,7 +386,7 @@ def plot_learning_curves(history):
 #             inputs = batch['audio'].to(device)
 #             batch_labels = batch['label']
             
-#             activations = get_layer_activations(model, inputs)
+#             activations = get_all_layer_activations(model, inputs)
 #             all_activations.append([act.cpu().numpy() for act in activations])
 #             labels.extend(batch_labels.numpy())
 #     print('rsa2')
