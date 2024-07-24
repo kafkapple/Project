@@ -135,12 +135,28 @@ class AudioDataset(Dataset):
         audio = load_and_preprocess_audio(self.file_paths[idx])
         return {"audio": audio, "label": self.labels[idx]}
   
+# def collate_fn(batch):
+#     audio = [item['audio'] for item in batch]
+#     audio = pad_sequence(audio, batch_first=True, padding_value=0.0)
+#     labels = torch.tensor([item['label'] for item in batch], dtype=torch.long)
+#     return {"audio": audio, "label": labels}
 def collate_fn(batch):
-    audio = [item['audio'] for item in batch]
-    audio = pad_sequence(audio, batch_first=True, padding_value=0.0)
-    labels = torch.tensor([item['label'] for item in batch], dtype=torch.long)
-    return {"audio": audio, "label": labels}
-
+    if isinstance(batch[0], dict):
+        # 배치 아이템이 딕셔너리 형태일 경우
+        audio = [item['audio'] for item in batch]
+        labels = [item['label'] for item in batch]
+    else:
+        # 배치 아이템이 튜플 형태일 경우
+        audio, labels = zip(*batch)
+    
+    # audio 텐서로 변환 및 패딩
+    audio_tensors = [torch.tensor(a, dtype=torch.float32) if not isinstance(a, torch.Tensor) else a for a in audio]
+    audio_padded = torch.nn.utils.rnn.pad_sequence(audio_tensors, batch_first=True, padding_value=0.0)
+    
+    # 레이블을 텐서로 변환
+    labels_tensor = torch.tensor(labels, dtype=torch.long)
+    
+    return {"audio": audio_padded, "label": labels_tensor}
 def train(model, train_dataloader, val_dataloader, config):
     device = config.device
     best_val_f1 = 0

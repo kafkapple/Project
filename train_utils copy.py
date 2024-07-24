@@ -153,15 +153,11 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
     all_labels = []
     
     progress_bar = tqdm(dataloader, desc="Training")
-    for batch in progress_bar:
-        features = batch['audio']
-        batch_labels = batch['label']
+    for features, batch_labels in progress_bar:
         if config.VISUALIZE:
             print(f"Features shape: {features.shape}")
             print(f"Labels shape: {batch_labels.shape}")
-            
         features, batch_labels = features.to(device), batch_labels.to(device)
-        
         if config.VISUALIZE:
             for name, module in model.named_modules():
                 if isinstance(module, torch.nn.BatchNorm1d):

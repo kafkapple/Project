@@ -282,12 +282,29 @@ class AudioDataset(Dataset):
         waveform, sample_rate = torchaudio.load(audio_path)
         features = extract_features(waveform, sample_rate)
         return features, label
+def collate_fn(batch):
+    if isinstance(batch[0], dict):
+        # 배치 아이템이 딕셔너리 형태일 경우
+        audio = [item['audio'] for item in batch]
+        labels = [item['label'] for item in batch]
+    else:
+        # 배치 아이템이 튜플 형태일 경우
+        audio, labels = zip(*batch)
+    
+    # audio 텐서로 변환 및 패딩
+    audio_tensors = [torch.tensor(a, dtype=torch.float32) if not isinstance(a, torch.Tensor) else a for a in audio]
+    audio_padded = torch.nn.utils.rnn.pad_sequence(audio_tensors, batch_first=True, padding_value=0.0)
+    
+    # 레이블을 텐서로 변환
+    labels_tensor = torch.tensor(labels, dtype=torch.long)
+    
+    return {"audio": audio_padded, "label": labels_tensor}
 
-def collate_batch(batch):
-    features, labels = zip(*batch)
-    features_padded = torch.nn.utils.rnn.pad_sequence([torch.tensor(f, dtype=torch.float32) for f in features], batch_first=True)
-    labels = torch.tensor(labels, dtype=torch.long)
-    return features_padded, labels
+# def collate_batch(batch):
+#     features, labels = zip(*batch)
+#     features_padded = torch.nn.utils.rnn.pad_sequence([torch.tensor(f, dtype=torch.float32) for f in features], batch_first=True)
+#     labels = torch.tensor(labels, dtype=torch.long)
+#     return features_padded, labels
 
 def prepare_dataloaders(data, labels, config, combine_indices=None, balance=False):
     if combine_indices:
@@ -315,9 +332,9 @@ def prepare_dataloaders(data, labels, config, combine_indices=None, balance=Fals
     # print_label_distribution(val_labels, "Validation")
     # print_label_distribution(test_labels, "Test")
     
-    train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
-    val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE, shuffle=False, collate_fn=collate_batch)
-    test_loader = DataLoader(test_dataset, batch_size=config.BATCH_SIZE, shuffle=False, collate_fn=collate_batch)
+    train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
+    val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE, shuffle=False, collate_fn=collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size=config.BATCH_SIZE, shuffle=False, collate_fn=collate_fn)
     
     return train_loader, val_loader, test_loader
 

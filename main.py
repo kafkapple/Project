@@ -148,7 +148,15 @@ def main(args=None):
             config.DATA_NAME = 'MELD_toy'
         else:
             print('ERR')
-        
+        select_model = int(input('Select Model type.\n1. Classifier only\n2. Pretrained model \n3. Finetuned model\n'))
+        if select_model ==1:
+            config.MODEL ="classifer"#"wav2vec_v2"  "wav2vec_finetuned"
+        elif select_model == 2:
+            config.MODEL="wav2vec_pretrained"#"wav2vec_v2" "classifer" "wav2vec_finetuned"
+        elif select_model == 3:
+            config.MODEL = "wav2vec_finetuned"
+        else:
+            print('ERR')
          #data_dir = load_data(config) 
         data_dir = os.path.join(config.DATA_DIR, config.DATA_NAME)
         print('Data Dir: ', data_dir)
