@@ -78,15 +78,15 @@ def perform_rsa(model, data_loader, device, num_layers=5):
 
     with torch.no_grad():
         for batch in data_loader:
+            print(batch.keys())
+            print(batch['audio'].shape)
+            inputs = batch['audio'].to(device)
             # 입력 차원 조정
             if inputs.dim() == 4:
                 inputs = inputs.squeeze(2)
             if inputs.dim() == 3:
                 inputs = inputs.squeeze(1)
-            print(batch.keys())  # 배치의 구조 확인
-            print(batch['audio'].shape)  # 오디오 데이터의 형태 확인
-           # break
-            inputs = batch['audio'].to(device)
+
             batch_activations = get_layer_activations(model, inputs, num_layers)
             
             if all_activations is None:
