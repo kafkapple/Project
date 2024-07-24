@@ -161,7 +161,7 @@ def train(model, train_dataloader, val_dataloader, config):
             audio_input = batch['audio'].to(device)
             labels = batch['label'].to(device)
 
-            outputs = model(audio_input)
+            outputs = model(audio_input) # type diff/ SeqClassifier
             logits = get_logits_from_output(outputs)#outputs.logits#['logits']
             loss = criterion(logits, labels)
             
@@ -207,7 +207,7 @@ def train(model, train_dataloader, val_dataloader, config):
             except:
                 print('err.')
     
-    return model, log_data
+    return model, history
 class Wav2VecFeatureExtractor(torch.nn.Module):
     def __init__(self, model_name="facebook/wav2vec2-base"):
         super().__init__()
@@ -239,6 +239,7 @@ class Wav2VecFeatureExtractor(torch.nn.Module):
 
 ### 
 config=Config()
+config.N_STEP_FIG=1
 
 num_epochs = 60
 config.NUM_EPOCHS=num_epochs
