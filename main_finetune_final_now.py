@@ -16,8 +16,10 @@ from transformers import Wav2Vec2Model, Wav2Vec2ForSequenceClassification
 from config import Config
 from data_utils import preprocess_data_meld
 from visualization import visualize_results
-from train_utils import log_metrics
+from train_utils import log_metrics, evaluate_model
 import torch
+
+from models import get_model, EmotionRecognitionModel_v2, EmotionRecognitionWithWav2Vec 
 
 gc.collect()
 torch.cuda.empty_cache()
@@ -257,27 +259,40 @@ def train(model, train_dataloader, val_dataloader, config):
                # torch.save(model.state_dict(), path_epoch)
             
     return model, log_data
-
-class Wav2Vec2ClassifierModel(nn.Module):
-    def __init__(self, config, num_labels, dropout=0.4):
+class Wav2VecFeatureExtractor(torch.nn.Module):
+    def __init__(self, model_name="facebook/wav2vec2-base"):
         super().__init__()
-        self.wav2vec2 = Wav2Vec2Model.from_pretrained(config.path_best)
-        self.classifier = nn.Sequential(
-            nn.Linear(768, 256),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(256, num_labels)
-        )
-    
+        self.model = Wav2Vec2Model.from_pretrained(model_name)
+        
     def forward(self, input_values):
-        outputs = self.wav2vec2(input_values)
-        hidden_states = outputs.last_hidden_state
-        pooled_output = torch.mean(hidden_states, dim=1)
-        logits = self.classifier(pooled_output)
-        return logits  # 직접 logits를 반환
+        outputs = self.model(input_values, output_hidden_states=True)
+        # penultimate layer (-2)의 hidden state를 반환
+        return outputs.hidden_states[-2]
+# class Wav2Vec2ClassifierModel(nn.Module):
+#     def __init__(self, config, num_labels, dropout=0.4):
+#         super().__init__()
+#         self.wav2vec2 = Wav2Vec2Model.from_pretrained(config.path_best)
+#         self.classifier = nn.Sequential(
+#             nn.Linear(768, 256),
+#             nn.ReLU(),
+#             nn.Dropout(dropout),
+#             nn.Linear(256, num_labels)
+#         )
+    
+#     def forward(self, input_values):
+#         outputs = self.wav2vec2(input_values)
+#         hidden_states = outputs.last_hidden_state
+#         pooled_output = torch.mean(hidden_states, dim=1)
+#         logits = self.classifier(pooled_output)
+#         return logits  # 직접 logits를 반환
+
+
 
 ### 
 config=Config()
+
+
+
 num_epochs = 60
 config.NUM_EPOCHS=num_epochs
 #lr=1e-4
@@ -318,8 +333,12 @@ config.device = device
 
 ###### I.
 # Fine-tuning 및 성능 기록
-config.model_name= 'wav2vec_I'
-model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
+config.model_name= 'wav2vec_I_0'
+model = Wav2VecFeatureExtractor()
+
+# model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_dataloader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE, activation=config.ACTIVATION, use_wav2vec=True)
+
+#model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
 model.to(device)
 for param in model.parameters():
     param.requires_grad = False

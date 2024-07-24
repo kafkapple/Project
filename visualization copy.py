@@ -242,3 +242,41 @@ def plot_learning_curves(history):
     
     #plt.tight_layout()
     return fig
+
+
+
+# def perform_rsa(model, data_loader, device):
+#     model.eval()
+#     representations = []
+#     labels = []
+
+#     with torch.no_grad():
+#         for batch in data_loader:
+#             inputs = batch['audio'].to(device)
+#             batch_labels = batch['label']
+#             outputs = model(inputs)
+#             representations.append(outputs.logits.cpu().numpy())
+#             labels.extend(batch_labels.numpy())
+
+#     representations = np.vstack(representations)
+#     labels = np.array(labels)
+
+#     corr_matrix = np.corrcoef(representations)
+
+#     # Calculate label correlation matrix
+#     label_matrix = np.equal.outer(labels, labels).astype(int)
+
+#     # Calculate RSA correlation
+#     rsa_corr, _ = spearmanr(corr_matrix.flatten(), label_matrix.flatten())
+
+#     # Plot the representation correlation matrix and the label correlation matrix
+#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+
+#     sns.heatmap(corr_matrix, cmap='coolwarm', ax=ax1)
+#     ax1.set_title("Representation Correlation Matrix")
+
+#     sns.heatmap(label_matrix, cmap='coolwarm', ax=ax2)
+#     ax2.set_title("Label Correlation Matrix")
+
+#     plt.suptitle(f"RSA Correlation: {rsa_corr:.2f}", fontsize=16)
+#     return fig

@@ -27,28 +27,27 @@ def compute_layer_similarity(activations, device):
             
             # 각 샘플 쌍에 대해 cosine similarity 계산
             cos_sim = F.cosine_similarity(flattened_i.unsqueeze(1), flattened_j.unsqueeze(0), dim=2)
-            # flattened_i.unsqueeze(1)의 결과 shape: (batch_size, 1, flattened_features)
+            # 모든 샘플 쌍의 평균 similarity
+            similarity_matrix[i, j] = cos_sim.mean()
+    
+    return similarity_matrix.cpu().numpy()
+      # flattened_i.unsqueeze(1)의 결과 shape: (batch_size, 1, flattened_features)
             #flattened_j.unsqueeze(0)의 결과 shape: (1, batch_size, flattened_features)
             #브로드캐스팅PyTorch는 이 두 텐서를 자동으로 브로드캐스팅하여 다음과 같은 형태로 확장합니다: 두 텐서 모두 (batch_size, batch_size, flattened_features) 형태로 확장
             #입력2: (batch_size, batch_size, flattened_features)
             #dim=2: 마지막 차원(특성 차원)을 따라 코사인 유사도를 계산합니다.
 
 
-            # 모든 샘플 쌍의 평균 similarity
-            similarity_matrix[i, j] = cos_sim.mean()
-    
-    return similarity_matrix.cpu().numpy()
-
-
 def get_layer_activations(model, inputs):
-    activations = []
-    def hook(module, input, output):
-        activations.append(output.detach())
+    activations = {}
+    def hook(name):
+        def hook_fn(module, input, output):
+            activations[name] = output.detach()
+        return hook_fn
     
     handles = []
     for name, module in model.named_modules():
-        if isinstance(module, (torch.nn.Linear, torch.nn.Conv1d)):  # 원하는 층 유형을 선택하세요
-            handles.append(module.register_forward_hook(hook))
+        handles.append(module.register_forward_hook(hook(name)))
     
     _ = model(inputs)
     
@@ -56,48 +55,52 @@ def get_layer_activations(model, inputs):
         handle.remove()
     
     return activations
-
 def perform_rsa(model, data_loader, device):
     model.eval()
-    all_activations = []
-    labels = []
+    all_activations = {}
 
     with torch.no_grad():
-        for batch in data_loader:
+        for batch in tqdm(data_loader, desc="Collecting activations"):
             inputs = batch['audio'].to(device)
-            batch_labels = batch['label']
-            
-            activations = get_layer_activations(model, inputs)
-            all_activations.append([act.cpu().numpy() for act in activations])
-            labels.extend(batch_labels.numpy())
+            batch_activations = get_layer_activations(model, inputs)
+            for name, activation in batch_activations.items():
+                if name not in all_activations:
+                    all_activations[name] = []
+                all_activations[name].append(activation.cpu())
 
-    # Combine activations from all batches
-    combined_activations = [np.concatenate([batch[i] for batch in all_activations]) for i in range(len(all_activations[0]))]
+    # 모든 배치의 활성화를 결합
+    combined_activations = {name: torch.cat(acts, dim=0) for name, acts in all_activations.items()}
     
-    layer_similarity_matrix = compute_layer_similarity(combined_activations, device)
+    # combined_activations의 형태 확인
+    for name, act in combined_activations.items():
+        print(f"Layer {name} activation shape: {act.shape}")
+
+    layer_names = list(combined_activations.keys())
+    activations_list = [combined_activations[name] for name in layer_names]
+
+    # compute_layer_similarity 함수 사용
+    similarity_matrix = compute_layer_similarity(activations_list, device)
+
+    # 시각화
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(similarity_matrix, xticklabels=layer_names, yticklabels=layer_names, cmap='coolwarm')
+    plt.title("Layer-wise Representation Similarity Analysis")
+    plt.xlabel("Layers")
+    plt.ylabel("Layers")
+    plt.tight_layout()
     
-    labels = np.array(labels)
-    label_matrix = np.equal.outer(labels, labels).astype(int)
+    return plt.gcf()
 
-    # Plot the layer similarity matrix and the label correlation matrix
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
-
-    sns.heatmap(layer_similarity_matrix, cmap='coolwarm', ax=ax1)
-    ax1.set_title("Layer Similarity Matrix")
-    ax1.set_xlabel("Layers")
-    ax1.set_ylabel("Layers")
-
-    sns.heatmap(label_matrix, cmap='coolwarm', ax=ax2)
-    ax2.set_title("Label Correlation Matrix")
-
-    plt.suptitle("Layer-wise Representation Similarity Analysis", fontsize=16)
-    return fig
-
-
-
-
-# def visualize_metric(model, data_loader):
-#     fig = plot_confusion_matrix(all_labels, all_preds, config.LABELS_EMOTION)
+def compute_similarity(act1, act2):
+    # 활성화를 2D로 펼치기
+    flat1 = act1.view(act1.size(0), -1)
+    flat2 = act2.view(act2.size(0), -1)
+    
+    # 코사인 유사도 계산
+    similarity = F.cosine_similarity(flat1.unsqueeze(1), flat2.unsqueeze(0), dim=2)
+    
+    # 평균 유사도 반환
+    return similarity.mean().item()
     
 def save_and_log_figure(stage, fig, config, name, title):
     """Save figure to file and log to wandb"""
@@ -190,31 +193,6 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
         except:
             print('Err. no learning curve.')
     
-    
-def extract_embeddings_and_predictions(model, data_loader, device):
-    model.eval()
-    all_embeddings = []
-    all_labels = []
-    all_predictions = []
-    
-    with torch.no_grad():
-        for inputs, labels in data_loader:
-            inputs = inputs.to(device)
-            outputs = model(inputs)
-            
-            hidden_states = outputs.last_hidden_state
-            pooled_output = torch.mean(hidden_states, dim=1)
-            
-            logits = model.classifier(pooled_output)
-            
-            # predictions = outputs.argmax(dim=1).cpu().numpy()
-            
-            all_embeddings.extend(pooled_output.cpu().numpy())
-            all_labels.extend(labels.numpy())
-            all_predictions.extend(labels.cpu().numpy())
-    
-    return np.array(all_embeddings), np.array(all_labels), np.array(all_predictions)
-
 def visualize_embeddings(config, embeddings, labels, method='tsne'):
     print('\nVisualization of embedding starts...\n')
     if method == 'pca':
@@ -289,42 +267,6 @@ def plot_confusion_matrix(labels, preds, labels_emotion, normalize=True):
     #plt.close(fig)
     return fig
 
-# def perform_rsa(model, data_loader, device):
-#     model.eval()
-#     representations = []
-#     labels = []
-
-#     with torch.no_grad():
-#         for batch in data_loader:
-#             inputs = batch['audio'].to(device)
-#             batch_labels = batch['label']
-#             outputs = model(inputs)
-#             representations.append(outputs.logits.cpu().numpy())
-#             labels.extend(batch_labels.numpy())
-
-#     representations = np.vstack(representations)
-#     labels = np.array(labels)
-
-#     corr_matrix = np.corrcoef(representations)
-
-#     # Calculate label correlation matrix
-#     label_matrix = np.equal.outer(labels, labels).astype(int)
-
-#     # Calculate RSA correlation
-#     rsa_corr, _ = spearmanr(corr_matrix.flatten(), label_matrix.flatten())
-
-#     # Plot the representation correlation matrix and the label correlation matrix
-#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
-
-#     sns.heatmap(corr_matrix, cmap='coolwarm', ax=ax1)
-#     ax1.set_title("Representation Correlation Matrix")
-
-#     sns.heatmap(label_matrix, cmap='coolwarm', ax=ax2)
-#     ax2.set_title("Label Correlation Matrix")
-
-#     plt.suptitle(f"RSA Correlation: {rsa_corr:.2f}", fontsize=16)
-#     return fig
-
 def plot_learning_curves(history):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
     
@@ -346,3 +288,77 @@ def plot_learning_curves(history):
     
     #plt.tight_layout()
     return fig
+
+
+    
+# def extract_embeddings_and_predictions(model, data_loader, device):
+#     model.eval()
+#     all_embeddings = []
+#     all_labels = []
+#     all_predictions = []
+    
+#     with torch.no_grad():
+#         for inputs, labels in data_loader:
+#             inputs = inputs.to(device)
+#             outputs = model(inputs)
+            
+#             hidden_states = outputs.last_hidden_state
+#             pooled_output = torch.mean(hidden_states, dim=1)
+            
+#             logits = model.classifier(pooled_output)
+            
+#             # predictions = outputs.argmax(dim=1).cpu().numpy()
+            
+#             all_embeddings.extend(pooled_output.cpu().numpy())
+#             all_labels.extend(labels.numpy())
+#             all_predictions.extend(labels.cpu().numpy())
+    
+#     return np.array(all_embeddings), np.array(all_labels), np.array(all_predictions)
+
+# def perform_rsa(model, data_loader, device):
+#     model.eval()
+#     all_activations = []
+#     labels = []
+#     print('rsa1')
+#     with torch.no_grad():
+#         for batch in data_loader:
+#             inputs = batch['audio'].to(device)
+#             batch_labels = batch['label']
+            
+#             activations = get_layer_activations(model, inputs)
+#             all_activations.append([act.cpu().numpy() for act in activations])
+#             labels.extend(batch_labels.numpy())
+#     print('rsa2')
+#     # Combine activations from all batches
+#     # 모든 배치의 활성화를 결합
+#     combined_activations = [torch.cat([batch[i] for batch in all_activations]) for i in range(len(all_activations[0]))]
+    
+#     # combined_activations의 형태 확인
+#     for i, act in enumerate(combined_activations):
+#         print(f"Layer {i} activation shape: {act.shape}")
+
+    
+#     layer_similarity_matrix = compute_layer_similarity(combined_activations, device)
+    
+#     labels = np.array(labels)
+#     label_matrix = np.equal.outer(labels, labels).astype(int)
+
+#     # Plot the layer similarity matrix and the label correlation matrix
+#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+
+#     sns.heatmap(layer_similarity_matrix, cmap='coolwarm', ax=ax1)
+#     ax1.set_title("Layer Similarity Matrix")
+#     ax1.set_xlabel("Layers")
+#     ax1.set_ylabel("Layers")
+
+#     sns.heatmap(label_matrix, cmap='coolwarm', ax=ax2)
+#     ax2.set_title("Label Correlation Matrix")
+
+#     plt.suptitle("Layer-wise Representation Similarity Analysis", fontsize=16)
+#     return fig
+
+
+
+
+# def visualize_metric(model, data_loader):
+#     fig = plot_confusion_matrix(all_labels, all_preds, config.LABELS_EMOTION)
