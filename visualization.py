@@ -146,8 +146,13 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
 
     with torch.no_grad():
         for batch in tqdm(data_loader, desc="Preparing data for Visualizing..."):
-            inputs = batch['audio'].to(device)
-            labels = batch['label'].to(device)
+            if isinstance(batch, dict):
+                inputs = batch['audio'].to(device)
+                labels = batch['label'].to(device)
+            else:  # batch가 튜플인 경우
+                inputs, labels = batch
+                inputs = inputs.to(device)
+                labels = labels.to(device)  # labels도 device로 이동
             outputs = model(inputs)
             logits = get_logits_from_output(outputs)
             _, preds = torch.max(logits, 1) 

@@ -146,7 +146,7 @@ def train(model, train_dataloader, val_dataloader, config):
     best_val_f1 = 0
     log_data = {
         'train': {'loss': [], 'accuracy': [], 'f1': []},
-        'val': {'loss': [], 'accuracy': [], 'f1': []}
+        'val': {'loss': [], 'accuracy': [], 'f1': []}, 'epoch':[]
     }
     
     
