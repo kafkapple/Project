@@ -23,33 +23,21 @@ from data_utils import get_logits_from_output
 import torch
 import torch.nn.functional as F
 
-
-
-def get_layer_activations(model, inputs, num_layers=5):
+def get_matching_layers(model, inputs, num_layers=5):
     activations = OrderedDict()
     
     def hook(name):
         def hook_fn(module, input, output):
             if isinstance(output, torch.Tensor):
-                if name not in activations:
-                    activations[name] = []
-                activations[name].append(output.detach())
+                activations[name] = output.detach()
             elif isinstance(output, tuple) and isinstance(output[0], torch.Tensor):
-                if name not in activations:
-                    activations[name] = []
-                activations[name].append(output[0].detach())
+                activations[name] = output[0].detach()
         return hook_fn
 
     hooks = []
-    # 모델 구조 탐색 및 후크 등록
-    def register_hooks(module, prefix=''):
-        for name, child in module.named_children():
-            full_name = f"{prefix}.{name}" if prefix else name
-            if isinstance(child, (torch.nn.Linear, torch.nn.Conv1d, torch.nn.Conv2d)):
-                hooks.append(child.register_forward_hook(hook(full_name)))
-            register_hooks(child, full_name)
-
-    register_hooks(model)
+    for name, module in model.named_modules():
+        if isinstance(module, (torch.nn.Linear, torch.nn.Conv1d, torch.nn.Conv2d)):
+            hooks.append(module.register_forward_hook(hook(name)))
 
     with torch.no_grad():
         _ = model(inputs)
@@ -57,20 +45,19 @@ def get_layer_activations(model, inputs, num_layers=5):
     for h in hooks:
         h.remove()
 
-    # 활성화 처리
-    processed_activations = OrderedDict()
-    for name, acts in activations.items():
-        if acts:  # 활성화가 있는 경우에만 처리
-            processed_activations[name] = torch.cat(acts, dim=0)
+    # 페널티메이트 레이어 찾기
+    penultimate_layer = list(activations.items())[-2]
+    penultimate_shape = penultimate_layer[1].shape[1:]  # 배치 차원 제외
 
-    print("Captured activations:", list(processed_activations.keys()))
-    print("Processed activations shapes:", {k: v.shape for k, v in processed_activations.items()})
+    matching_layers = OrderedDict()
+    for name, act in reversed(list(activations.items())):
+        if act.shape[1:] == penultimate_shape:
+            matching_layers[name] = act
+            if len(matching_layers) == num_layers:
+                break
 
-    if len(processed_activations) == 0:
-        print("Warning: No activations captured. Check model structure and hooks.")
-
-    # 마지막 num_layers개의 레이어만 선택
-    return OrderedDict(list(processed_activations.items())[-num_layers:])
+    print(f"Matching layers found: {list(matching_layers.keys())}")
+    return matching_layers
 
 def compute_layer_similarity(activations):
     layer_names = list(activations.keys())
@@ -82,59 +69,46 @@ def compute_layer_similarity(activations):
             act_i = activations[layer_names[i]]
             act_j = activations[layer_names[j]]
             
-            print(f"Computing similarity between {layer_names[i]} and {layer_names[j]}")
-            print(f"Shape of act_i: {act_i.shape}, Shape of act_j: {act_j.shape}")
-            
             # 각 활성화를 2D로 평탄화
             flat_i = act_i.view(act_i.size(0), -1)
             flat_j = act_j.view(act_j.size(0), -1)
             
-            print(f"Shape after flattening - flat_i: {flat_i.shape}, flat_j: {flat_j.shape}")
             
+            print(f"Computing similarity between {layer_names[i]} and {layer_names[j]}")
+            print(f"Shape of act_i: {act_i.shape}, Shape of act_j: {act_j.shape}")
+            
+            print(f"Shape after flattening - flat_i: {flat_i.shape}, flat_j: {flat_j.shape}")
             # 정규화
             norm_i = torch.norm(flat_i, p=2, dim=1, keepdim=True)
             norm_j = torch.norm(flat_j, p=2, dim=1, keepdim=True)
             flat_i_normalized = flat_i / (norm_i + 1e-8)
             flat_j_normalized = flat_j / (norm_j + 1e-8)
-            
             # 코사인 유사도 계산
             similarity = torch.mm(flat_i_normalized, flat_j_normalized.t())
-            
-            print(f"Shape of similarity matrix: {similarity.shape}")
             
             # 평균 유사도 계산
             similarity_matrix[i, j] = similarity.mean().item()
     
     return similarity_matrix, layer_names
+
 def perform_rsa(model, data_loader, device, num_layers=5):
     model.eval()
-    all_activations = None
+    
+    for batch in data_loader:
+        inputs = batch['audio'].to(device)
+        if inputs.dim() == 4:
+            inputs = inputs.squeeze(2)
+        if inputs.dim() == 3:
+            inputs = inputs.squeeze(1)
+        
+        print("Input shape:", inputs.shape)
+        
+        matching_activations = get_matching_layers(model, inputs, num_layers)
+        break  # 첫 번째 배치만 사용
 
-    with torch.no_grad():
-        for batch in data_loader:
-            inputs = batch['audio'].to(device)
-            if inputs.dim() == 4:
-                inputs = inputs.squeeze(2)
-            if inputs.dim() == 3:
-                inputs = inputs.squeeze(1)
-            
-            print("Input shape:", inputs.shape)
-            
-            batch_activations = get_layer_activations(model, inputs, num_layers)
-            
-            print("Batch activations keys:", list(batch_activations.keys()))
-            print("Batch activations shapes:", {k: v.shape for k, v in batch_activations.items()})
-            
-            all_activations = batch_activations
-            break  # 첫 번째 배치만 사용
+    print("Matching activations shapes:", {k: v.shape for k, v in matching_activations.items()})
 
-    print("All activations shapes:", {k: v.shape for k, v in all_activations.items()} if all_activations else "None")
-
-    if all_activations is None or len(all_activations) == 0:
-        print("No activations captured. Check if get_layer_activations is working correctly.")
-        return None
-
-    similarity_matrix, layer_names = compute_layer_similarity(all_activations)
+    similarity_matrix, layer_names = compute_layer_similarity(matching_activations)
 
     plt.figure(figsize=(12, 10))
     sns.heatmap(similarity_matrix, annot=True, cmap='coolwarm', 
@@ -145,7 +119,7 @@ def perform_rsa(model, data_loader, device, num_layers=5):
     plt.tight_layout()
 
     return plt.gcf()
-    
+
 def save_and_log_figure(stage, fig, config, name, title):
     """Save figure to file and log to wandb"""
     fig_path = os.path.join(config.MODEL_RESULTS, f"{name}_{config.global_epoch}.png")
@@ -154,7 +128,7 @@ def save_and_log_figure(stage, fig, config, name, title):
     plt.close(fig)
     
 def visualize_results(config, model, data_loader, device, log_data, stage):
-    print('\nVisualization of results starts.\n')
+    print('\n[Visualization]\n')
 
     # Confusion Matrix and Embeddings visualization for all stages
     model.eval()
@@ -240,7 +214,7 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
         print('(Err) learning curve\n')
     
 def visualize_embeddings(config, embeddings, labels, method='tsne'):
-    print('\nVisualization of embedding starts...\n')
+    print('\n\nVisualization of embedding...\n')
     if method == 'pca':
         reducer = PCA(n_components=2)
     elif method == 'tsne':
