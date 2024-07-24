@@ -115,12 +115,18 @@ def extract_embeddings_and_predictions(model, data_loader, device):
         for inputs, labels in data_loader:
             inputs = inputs.to(device)
             outputs = model(inputs)
-            embeddings = outputs.cpu().numpy()
-            predictions = outputs.argmax(dim=1).cpu().numpy()
             
-            all_embeddings.extend(embeddings)
+            hidden_states = outputs.last_hidden_state
+            pooled_output = torch.mean(hidden_states, dim=1)
+            
+            logits = model.classifier(pooled_output)
+            
+            # predictions = outputs.argmax(dim=1).cpu().numpy()
+            
+            
+            all_embeddings.extend(pooled_output.cpu().numpy())
             all_labels.extend(labels.numpy())
-            all_predictions.extend(predictions)
+            all_predictions.extend(labels.cpu().numpy())
     
     return np.array(all_embeddings), np.array(all_labels), np.array(all_predictions)
 
