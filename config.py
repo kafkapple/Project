@@ -20,6 +20,8 @@ class Config:
     device=''
     N_SAMPLE=500
     
+    weight_decy=0.01
+    label_smoothing=0.1
     dataset={"RAVDESS": "https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1",
          "MELD": "https://huggingface.co/datasets/declare-lab/MELD/resolve/main/MELD.Raw.tar.gz",
          "MELD_toy": "https://huggingface.co/datasets/declare-lab/MELD/resolve/main/MELD.Raw.tar.gz"}
