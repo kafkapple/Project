@@ -24,7 +24,6 @@ import torch
 import torch.nn.functional as F
 from collections import Counter
 
-
 def compute_layer_similarity(activations):
     layer_names = list(activations.keys())
     n_layers = len(layer_names)
@@ -46,16 +45,17 @@ def compute_layer_similarity(activations):
             flat_j_normalized = flat_j / (norm_j + 1e-8)
             
             # 코사인 유사도 계산
-            similarity = torch.mm(flat_i_normalized, flat_j_normalized.t())
+            similarity = F.cosine_similarity(flat_i_normalized.unsqueeze(1), flat_j_normalized.unsqueeze(0))
             
             # 평균 유사도 계산
             similarity_matrix[i, j] = similarity.mean().item()
     
     return similarity_matrix, layer_names
 
-from collections import Counter
+def get_flattened_shape(tensor_shape):
+    return int(np.prod(tensor_shape[1:]))  # 배치 차원을 제외한 나머지를 곱함
 
-def get_most_common_layers(model, inputs, num_layers=5):
+def get_most_common_layers(model, inputs, num_layers=5, select_all_common=False):
     activations = OrderedDict()
     
     def hook(name):
@@ -77,24 +77,25 @@ def get_most_common_layers(model, inputs, num_layers=5):
     for h in hooks:
         h.remove()
 
-    # 레이어 shape 카운트
-    shape_counts = Counter(act.shape[1:] for act in activations.values())
+    # 레이어 flattened shape 카운트
+    shape_counts = Counter(get_flattened_shape(act.shape) for act in activations.items())
     
-    # 가장 흔한 shape 찾기
+    # 가장 흔한 flattened shape 찾기
     most_common_shape = shape_counts.most_common(1)[0][0]
+    most_common_count = shape_counts[most_common_shape]
     
     matching_layers = OrderedDict()
     for name, act in reversed(list(activations.items())):
-        if act.shape[1:] == most_common_shape:
+        if get_flattened_shape(act.shape) == most_common_shape:
             matching_layers[name] = act
-            if len(matching_layers) == num_layers:
+            if not select_all_common and len(matching_layers) == num_layers:
                 break
 
-    print(f"Most common shape: {most_common_shape}")
+    print(f"Most common flattened shape: {most_common_shape}")
     print(f"Matching layers found ({len(matching_layers)}): {list(matching_layers.keys())}")
     return matching_layers, most_common_shape
 
-def perform_rsa(model, data_loader, device, num_layers=5):
+def perform_rsa(model, data_loader, device, num_layers=5, select_all_common=False):
     model.eval()
     
     try:
@@ -107,7 +108,7 @@ def perform_rsa(model, data_loader, device, num_layers=5):
             
             print("Input shape:", inputs.shape)
             
-            matching_activations, most_common_shape = get_most_common_layers(model, inputs, num_layers)
+            matching_activations, most_common_shape = get_most_common_layers(model, inputs, num_layers, select_all_common)
             break  # 첫 번째 배치만 사용
 
         print("Matching activations shapes:", {k: v.shape for k, v in matching_activations.items()})
@@ -121,7 +122,7 @@ def perform_rsa(model, data_loader, device, num_layers=5):
         plt.figure(figsize=(12, 10))
         sns.heatmap(similarity_matrix, annot=True, cmap='coolwarm', 
                     xticklabels=layer_names, yticklabels=layer_names)
-        plt.title(f"Layer-wise Representation Similarity Analysis\n({len(layer_names)} layers, shape: {most_common_shape})")
+        plt.title(f"Layer-wise Representation Similarity Analysis\n({len(layer_names)} layers, flattened shape: {most_common_shape})")
         plt.xticks(rotation=45, ha='right')
         plt.yticks(rotation=45)
         plt.tight_layout()
@@ -215,7 +216,7 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
         print('No embedding.')   
          
     try:
-        fig_rsa = perform_rsa(model, data_loader, config.device)#, select_all=True)
+        fig_rsa = perform_rsa(model, data_loader, config.device, select_all_common=True)
         save_and_log_figure(stage, fig_rsa, config, "Representation similarity", f"{stage.capitalize()}")
         
     except:
