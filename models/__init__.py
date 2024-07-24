@@ -1,6 +1,6 @@
-from .models import list_models, chk_best_model_info, find_best_model, prep_model, get_model, EmotionRecognitionModel_v1, EmotionRecognitionModel_v2 #SVMClassifier, 
+from .models import list_models, chk_best_model_info, find_best_model, prep_model, get_model, EmotionRecognitionModel_v2 #SVMClassifier, 
 
-
+#EmotionRecognitionModel_v1, 
 # def get_model(config, train_loader):
 #     input_size = train_loader.dataset[0][0].shape[1]
 #     num_classes = len(config.LABELS_EMOTION)

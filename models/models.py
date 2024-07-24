@@ -11,8 +11,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from glob import glob
 
 from train_utils import evaluate_model
-
-
+from transformers import Wav2Vec2Model
+import torch
+import torch.nn as nn
+from transformers import Wav2Vec2Model
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -139,6 +141,7 @@ def prep_model(config, train_loader, is_sweep=False):
     
     #### Optimizer & Cost function 
     model = get_model(config, train_loader)
+    
     if config.OPTIMIZER == "adam":
         optimizer = torch.optim.Adam(model.parameters(), weight_decay=config.weight_decay, lr=float(config.lr))
     elif config.OPTIMIZER == "SGD":
@@ -217,22 +220,30 @@ def prep_model(config, train_loader, is_sweep=False):
     return model, optimizer, criterion, device
 
 def get_model(config, train_loader):
-    if config.MODEL == 'wav2vec_v1':
-        model_class = EmotionRecognitionModel_v1
-    elif config.MODEL == 'wav2vec_v2': 
-        model_class = EmotionRecognitionModel_v2
+    
+    if config.MODEL == 'classifier_only':
+        print('classifer only')
+        model = EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_loader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE,
+        activation=config.ACTIVATION, use_wav2vec=False)
+        
+    elif config.MODEL =='wav2vec_pretrained':
+        print('Pretrained model loaded.')
+        
+        model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_loader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE,
+        activation=config.ACTIVATION, use_wav2vec=True)
+    elif config.MODEL =='wav2vec_finetuned':
+        print('Pretrained model loading and finetuning.')
+        config.path_pretrained=''
+        model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_loader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE,
+        activation=config.ACTIVATION, use_wav2vec=True)
+    
     # elif config.MODEL == 'SVM_C':
     #     return SVMClassifier(train_loader.dataset[0][0].shape[1], num_classes=len(config.LABELS_EMOTION))
     else:
         raise ValueError(f"Unknown model type: {config.MODEL}")
     
-    return model_class(
-        input_size=train_loader.dataset[0][0].shape[1],
-        num_classes=len(config.LABELS_EMOTION),
-        dropout_rate=config.DROPOUT_RATE,
-        activation=config.ACTIVATION
-    )
-    
+    return model#model_class(
+  
 # ### Models
 # class SVMClassifier:
 #     def __init__(self, input_size, num_classes):
@@ -251,15 +262,18 @@ def get_model(config, train_loader):
 
 #     def load(self, path):
 #         self.model = joblib.load(path)
-        
+import torch
+import torch.nn as nn
+from transformers import Wav2Vec2Model
+
 class EmotionRecognitionBase(nn.Module):
     def __init__(self, input_size, num_classes, dropout_rate, activation):
         super().__init__()
         self.dropout = nn.Dropout(dropout_rate)
         self.activation = self._get_activation(activation)
-        self.input_size=input_size
-        self.num_classes=num_classes
-        
+        self.input_size = input_size
+        self.num_classes = num_classes
+    
     def _get_activation(self, activation):
         if activation == 'gelu':
             return nn.GELU()
@@ -270,36 +284,10 @@ class EmotionRecognitionBase(nn.Module):
         else:
             raise ValueError(f"Unknown activation function: {activation}")
 
-class EmotionRecognitionModel_v1(EmotionRecognitionBase):
-    def __init__(self, input_size, num_classes, dropout_rate, activation):
-        super().__init__(input_size, num_classes, dropout_rate, activation)
-        self.conv1 = nn.Conv1d(input_size, 128, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv1d(128, 64, kernel_size=3, padding=1)
-        self.pool = nn.AdaptiveAvgPool1d(1)
-        self.fc1 = nn.Linear(64, 32)
-        self.fc2 = nn.Linear(32, num_classes)
-
-    def forward(self, x):
-        if x.dim() == 3 and x.shape[1] != self.input_size:
-            print('x dim = 3')
-            x = x.transpose(1, 2)
-        elif x.dim() == 2:
-            print('x dim = 2')
-            x = x.unsqueeze(1)
-        else:
-            raise ValueError(f"Unexpected shape of input: {x.shape}")
-        x = self.activation(self.conv1(x)) 
-        x = self.activation(self.conv2(x))
-        x = self.pool(x).squeeze(2)
-        x = self.activation(self.fc1(x))
-        x = self.dropout(x)
-        x = self.fc2(x)
-        return x
-
 class EmotionRecognitionModel_v2(EmotionRecognitionBase):
     def __init__(self, input_size, num_classes, dropout_rate, activation):
         super().__init__(input_size, num_classes, dropout_rate, activation)
-        momentum=0.01
+        momentum = 0.01
         self.fc1 = nn.Linear(input_size, 256)
         self.bn1 = nn.BatchNorm1d(256, momentum=momentum)
         self.fc2 = nn.Linear(256, 128)
@@ -309,18 +297,67 @@ class EmotionRecognitionModel_v2(EmotionRecognitionBase):
         self.fc4 = nn.Linear(64, num_classes)
 
     def forward(self, x):
-        # print(f"Input shape: {x.shape}")
-        x = x.squeeze(1)  # Squeeze the input to remove dimensions of size 1
-        # print(f"Shape after squeeze: {x.shape}")
+        #x = x.squeeze(1)  # Squeeze the input to remove dimensions of size 1
+        x = x.view(x.size(0), -1)  # Flatten the input if necessary
         x = self.activation(self.bn1(self.fc1(x)))
-        # print(f"After fc1 and bn1: {x.shape}")
         x = self.dropout(x)
         x = self.activation(self.bn2(self.fc2(x)))
-        # print(f"After fc2 and bn2: {x.shape}")
         x = self.dropout(x)
         x = self.activation(self.bn3(self.fc3(x)))
-        # print(f"After fc3 and bn3: {x.shape}")
         x = self.dropout(x)
         x = self.fc4(x)
-        # print(f"Output shape: {x.shape}")
         return x
+
+class EmotionRecognitionWithWav2Vec(nn.Module):
+    def __init__(self, num_classes, config, dropout_rate=0.5, activation='relu', use_wav2vec=True, input_size=None):
+        super().__init__()
+        
+        self.use_wav2vec = use_wav2vec
+        self.config = config
+        
+        if use_wav2vec:
+            # wav2vec 모델 로드
+            self.wav2vec = Wav2Vec2Model.from_pretrained(self.config.path_pretrained)#"facebook/wav2vec2-base")
+            self.wav2vec.config.mask_time_length = config.mask_time_length
+            wav2vec_output_size = self.wav2vec.config.hidden_size
+        else:
+            # wav2vec을 사용하지 않을 경우의 입력 크기 (예: MFCC 특징의 크기)
+            wav2vec_output_size = input_size#self.wav2vec.config.hidden_size#40  # 예시 값, 실제 입력 크기에 맞게 조정 필요
+        
+        # EmotionRecognitionModel_v2 인스턴스화
+        self.emotion_classifier = EmotionRecognitionModel_v2(
+            input_size=wav2vec_output_size,
+            num_classes=num_classes,
+            dropout_rate=dropout_rate,
+            activation=activation
+        )
+        
+    def forward(self, input_values):
+        if self.use_wav2vec:
+            if self.config.VISUALIZE:
+                print(f"Input shape before processing: {input_values.shape}")
+            # 입력 데이터 형태 조정
+            if input_values.dim() == 4:
+                input_values = input_values.squeeze(2)  # [batch, 1, 1, sequence] -> [batch, 1, sequence]
+            if input_values.dim() == 3:
+                input_values = input_values.squeeze(1)  # [batch, 1, sequence] -> [batch, sequence]
+            # wav2vec 특징 추출
+            if self.config.VISUALIZE:
+                print(f"Input shape after processing: {input_values.shape}")
+            wav2vec_outputs = self.wav2vec(input_values).last_hidden_state
+            # 시퀀스의 평균을 취하여 고정 크기 벡터 얻기
+            features = torch.mean(wav2vec_outputs, dim=1)
+        else:
+            # wav2vec을 사용하지 않을 경우, 입력을 그대로 사용
+            #features = input_values
+            features = input_values.view(input_values.size(0), -1)  # Flatten the input
+        
+        # 감정 분류
+        emotion_logits = self.emotion_classifier(features)
+        
+        return emotion_logits
+
+# 모델 초기화 예시
+
+
+# 모델 초기화 예시

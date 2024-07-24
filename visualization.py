@@ -10,6 +10,87 @@ from scipy.stats import spearmanr
 import pandas as pd
 from tqdm import tqdm
 import os
+from scipy.spatial.distance import cosine
+
+import torch.nn.functional as F
+
+def compute_layer_similarity(activations, device):
+    n_layers = len(activations)
+    similarity_matrix = torch.zeros((n_layers, n_layers), device=device)
+    
+    for i in range(n_layers):
+        for j in range(n_layers):
+            flattened_i = activations[i].view(activations[i].size(0), -1)
+            flattened_j = activations[j].view(activations[j].size(0), -1)
+            
+            # 각 샘플 쌍에 대해 cosine similarity 계산
+            cos_sim = F.cosine_similarity(flattened_i.unsqueeze(1), flattened_j.unsqueeze(0), dim=2)
+            # flattened_i.unsqueeze(1)의 결과 shape: (batch_size, 1, flattened_features)
+            #flattened_j.unsqueeze(0)의 결과 shape: (1, batch_size, flattened_features)
+            #브로드캐스팅PyTorch는 이 두 텐서를 자동으로 브로드캐스팅하여 다음과 같은 형태로 확장합니다: 두 텐서 모두 (batch_size, batch_size, flattened_features) 형태로 확장
+            #입력2: (batch_size, batch_size, flattened_features)
+            #dim=2: 마지막 차원(특성 차원)을 따라 코사인 유사도를 계산합니다.
+
+
+            # 모든 샘플 쌍의 평균 similarity
+            similarity_matrix[i, j] = cos_sim.mean()
+    
+    return similarity_matrix.cpu().numpy()
+
+
+def get_layer_activations(model, inputs):
+    activations = []
+    def hook(module, input, output):
+        activations.append(output.detach())
+    
+    handles = []
+    for name, module in model.named_modules():
+        if isinstance(module, (torch.nn.Linear, torch.nn.Conv1d)):  # 원하는 층 유형을 선택하세요
+            handles.append(module.register_forward_hook(hook))
+    
+    _ = model(inputs)
+    
+    for handle in handles:
+        handle.remove()
+    
+    return activations
+
+def perform_rsa(model, data_loader, device):
+    model.eval()
+    all_activations = []
+    labels = []
+
+    with torch.no_grad():
+        for batch in data_loader:
+            inputs = batch['audio'].to(device)
+            batch_labels = batch['label']
+            
+            activations = get_layer_activations(model, inputs)
+            all_activations.append([act.cpu().numpy() for act in activations])
+            labels.extend(batch_labels.numpy())
+
+    # Combine activations from all batches
+    combined_activations = [np.concatenate([batch[i] for batch in all_activations]) for i in range(len(all_activations[0]))]
+    
+    layer_similarity_matrix = compute_layer_similarity(combined_activations)
+    
+    labels = np.array(labels)
+    label_matrix = np.equal.outer(labels, labels).astype(int)
+
+    # Plot the layer similarity matrix and the label correlation matrix
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+
+    sns.heatmap(layer_similarity_matrix, cmap='coolwarm', ax=ax1)
+    ax1.set_title("Layer Similarity Matrix")
+    ax1.set_xlabel("Layers")
+    ax1.set_ylabel("Layers")
+
+    sns.heatmap(label_matrix, cmap='coolwarm', ax=ax2)
+    ax2.set_title("Label Correlation Matrix")
+
+    plt.suptitle("Layer-wise Representation Similarity Analysis", fontsize=16)
+    return fig
+
 
 def get_logits_from_output(outputs):
     if isinstance(outputs, dict):
@@ -205,41 +286,41 @@ def plot_confusion_matrix(labels, preds, labels_emotion, normalize=True):
     #plt.close(fig)
     return fig
 
-def perform_rsa(model, data_loader, device):
-    model.eval()
-    representations = []
-    labels = []
+# def perform_rsa(model, data_loader, device):
+#     model.eval()
+#     representations = []
+#     labels = []
 
-    with torch.no_grad():
-        for batch in data_loader:
-            inputs = batch['audio'].to(device)
-            batch_labels = batch['label']
-            outputs = model(inputs)
-            representations.append(outputs.logits.cpu().numpy())
-            labels.extend(batch_labels.numpy())
+#     with torch.no_grad():
+#         for batch in data_loader:
+#             inputs = batch['audio'].to(device)
+#             batch_labels = batch['label']
+#             outputs = model(inputs)
+#             representations.append(outputs.logits.cpu().numpy())
+#             labels.extend(batch_labels.numpy())
 
-    representations = np.vstack(representations)
-    labels = np.array(labels)
+#     representations = np.vstack(representations)
+#     labels = np.array(labels)
 
-    corr_matrix = np.corrcoef(representations)
+#     corr_matrix = np.corrcoef(representations)
 
-    # Calculate label correlation matrix
-    label_matrix = np.equal.outer(labels, labels).astype(int)
+#     # Calculate label correlation matrix
+#     label_matrix = np.equal.outer(labels, labels).astype(int)
 
-    # Calculate RSA correlation
-    rsa_corr, _ = spearmanr(corr_matrix.flatten(), label_matrix.flatten())
+#     # Calculate RSA correlation
+#     rsa_corr, _ = spearmanr(corr_matrix.flatten(), label_matrix.flatten())
 
-    # Plot the representation correlation matrix and the label correlation matrix
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+#     # Plot the representation correlation matrix and the label correlation matrix
+#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
 
-    sns.heatmap(corr_matrix, cmap='coolwarm', ax=ax1)
-    ax1.set_title("Representation Correlation Matrix")
+#     sns.heatmap(corr_matrix, cmap='coolwarm', ax=ax1)
+#     ax1.set_title("Representation Correlation Matrix")
 
-    sns.heatmap(label_matrix, cmap='coolwarm', ax=ax2)
-    ax2.set_title("Label Correlation Matrix")
+#     sns.heatmap(label_matrix, cmap='coolwarm', ax=ax2)
+#     ax2.set_title("Label Correlation Matrix")
 
-    plt.suptitle(f"RSA Correlation: {rsa_corr:.2f}", fontsize=16)
-    return fig
+#     plt.suptitle(f"RSA Correlation: {rsa_corr:.2f}", fontsize=16)
+#     return fig
 
 def plot_learning_curves(history):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))

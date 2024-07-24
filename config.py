@@ -14,56 +14,68 @@ from collections import namedtuple
 # scheduler at train_utils CosineAnnealingLR
 # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 @dataclass
+
+#
 class Config:
+    mask_time_length =2
     
-    path_best="facebook/wav2vec2-base"
     device=''
-    N_SAMPLE=500
     
-    weight_decy=0.01
+    # monitoring
+    N_STEP_FIG: int = 5
+    N_EMBEDDINGS: int = 500 # n of embeddings to show
+
+    VISUALIZE = False # during training 
+    
+    N_SAMPLE=500 # for toy sampling?
+    
+    NUM_EPOCHS: int = 5
+    BATCH_SIZE: int = 32
+    lr: float = 0.0005
+    # Model settings
+    DATA_NAME= "MELD"#"RAVDESS"#_audio_speech"
+    MODEL: str = "wav2vec_pretrained"#"wav2vec_v2" "classifer" "wav2vec_finetuned"
+    model_name: str = ''
+    
+    path_best="facebook/wav2vec2-base" # model pretrained
+    path_pretrained=path_best
+    
+    ACTIVATION: str = "relu"
+    OPTIMIZER: str = "adam"
+    # For regul
+    DROPOUT_RATE: float = 0.4
+    early_stop_epoch: int = 100
+    weight_decay: float =1e-5 #0.01
     label_smoothing=0.1
+    #momentum = 0.01
+    
+    BOOL = True
+    SCHEDULER: bool = BOOL
+    GRADIENT_CLIP: bool = BOOL
+    eta_min: float = 1e-4 /100
+    
+    MODEL_INIT: bool = False # no need for finetuning
+    
     dataset={"RAVDESS": "https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1",
          "MELD": "https://huggingface.co/datasets/declare-lab/MELD/resolve/main/MELD.Raw.tar.gz",
          "MELD_toy": "https://huggingface.co/datasets/declare-lab/MELD/resolve/main/MELD.Raw.tar.gz"}
     # select_dataset = "RAVDESS"
-    DATA_NAME= "MELD"#"RAVDESS"#_audio_speech"
+    
     if DATA_NAME=="MELD_toy":
         N_SAMPLE = 30
-    VISUALIZE = False
-    BOOL = True
-    MODEL_INIT: bool =BOOL
-    SCHEDULER: bool = BOOL
-    GRADIENT_CLIP: bool = BOOL
-    eta_min: float = 1e-4 /100
-    #momentum = 0.01
-    model_name: str = ''
-    early_stop_epoch: int = 100
+ 
     CUR_MODE: str ='' # current mode
-    N_STEP_FIG: int = 5
+
     # General settings
     SEED: int = 2024
-    NUM_EPOCHS: int = 5
-    global_epoch:int = 0
 
-    BATCH_SIZE: int = 32
-    
-    DROPOUT_RATE: float = 0.4
-    lr: float = 0.0005
-    
-    weight_decay: float =1e-5
-    
-    # Model settings
-    MODEL: str = "wav2vec_v2"
-    ACTIVATION: str = "relu"
-    OPTIMIZER: str = "adam"
-    
-   
+    global_epoch:int = 0
     
     history: dict = field(default_factory=lambda: {
         'train': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []},
         'val': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []}
     })
-    N_EMBEDDINGS: int = 500 # n of embeddings to show
+    
     # Data settings
     RATIO_TRAIN: float = 0.7
     RATIO_TEST: float = 0.15
@@ -76,7 +88,6 @@ class Config:
         0: 'anger', 1: 'disgust', 2: 'fear', 3: 'joy',
         4: 'neutral', 5: 'sadness', 6: 'surprise'
     })
-    
     
     LABELS_EMOTION_TEXT: dict = field(default_factory=lambda:{
         'sadness': 0, 'anger': 1, 'love': 2, 'surprise': 3, 'fear': 4, 'joy': 5

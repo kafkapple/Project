@@ -21,6 +21,27 @@ import torch
 
 gc.collect()
 torch.cuda.empty_cache()
+
+def print_model_info(model):
+    # 총 파라미터 수 계산
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    print("Model Structure:")
+    print(model)
+    print("\nLayer-wise details:")
+    
+    for name, module in model.named_modules():
+        if not list(module.children()):  # 자식 모듈이 없는 경우 (즉, 기본 레이어인 경우)
+            print(f"\nLayer: {name}")
+            print(f"Type: {type(module).__name__}")
+            params = sum(p.numel() for p in module.parameters())
+            print(f"Parameters: {params:,}")
+
+    print(f"\nTotal layers: {len(list(model.modules()))}")
+    print(f"Total parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
+    
 def unfreeze_layers(model, num_layers):
     for param in model.parameters():
         param.requires_grad = False

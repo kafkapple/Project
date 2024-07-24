@@ -154,6 +154,9 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
     
     progress_bar = tqdm(dataloader, desc="Training")
     for features, batch_labels in progress_bar:
+        if config.VISUALIZE:
+            print(f"Features shape: {features.shape}")
+            print(f"Labels shape: {batch_labels.shape}")
         features, batch_labels = features.to(device), batch_labels.to(device)
         if config.VISUALIZE:
             for name, module in model.named_modules():
@@ -166,12 +169,11 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
         loss.backward()
         
         if config.GRADIENT_CLIP:
-            print('Gradient Clipping')
+            print('\nGradient Clipping')
             #gradient clipping
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
-        
         optimizer.step()
-        
+
         running_loss += loss.item()
         _, predicted = torch.max(outputs, 1)
         all_preds.extend(predicted.cpu().numpy())
