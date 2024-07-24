@@ -209,7 +209,15 @@ def evaluate_model(config, model, dataloader, criterion, device):
     EvaluationResult = config.EvaluationResult
     
     with torch.no_grad():
-        for features, batch_labels in tqdm(dataloader, desc="Evaluating"):
+        for batch in dataloader:
+            features = batch['audio']
+            batch_labels = batch['label']
+            
+            if config.VISUALIZE:
+                print(f"Features shape: {features.shape}")
+                print(f"Labels shape: {batch_labels.shape}")
+
+        # for features, batch_labels in tqdm(dataloader, desc="Evaluating"):
             features, batch_labels = features.to(device), batch_labels.to(device)
             outputs = model(features)
             loss = criterion(outputs, batch_labels)

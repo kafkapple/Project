@@ -51,11 +51,12 @@ class Config:
     #momentum = 0.01
     
     BOOL = True
+    BOOL_MODEL_INIT=False
     SCHEDULER: bool = BOOL
     GRADIENT_CLIP: bool = BOOL
     eta_min: float = 1e-4 /100
     
-    MODEL_INIT: bool = False # no need for finetuning
+    MODEL_INIT: bool = BOOL_MODEL_INIT # no need for finetuning
     
     dataset={"RAVDESS": "https://zenodo.org/record/1188976/files/Audio_Speech_Actors_01-24.zip?download=1",
          "MELD": "https://huggingface.co/datasets/declare-lab/MELD/resolve/main/MELD.Raw.tar.gz",
@@ -169,6 +170,8 @@ class Config:
         
         self.MODEL_BASE_DIR=os.path.join(self.BASE_DIR, 'models')
         self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, f"{self.MODEL}_{self.DATA_NAME}")
+        self.MODEL_PRE_BASE_DIR = os.path.join(self.MODEL_BASE_DIR, 'pretrained')
+        os.makedirs(self.MODEL_PRE_BASE_DIR, exist_ok=True)
         ####
         #self.path_pretrained = os.path.join(self.MODEL_BASE_DIR, 'wav2vec_I_fine_tune_best')
 
@@ -178,6 +181,7 @@ class Config:
         #self.WANDB_PROJECT = f"{self.PROJECT_DIR}_{self.MODEL}"#_{date_str}"
 
         print(f'\n\n##### Current Project Location #####\n-Base Directory: {self.BASE_DIR}\n-Data: {self.DATA_DIR}\n-Models: {self.MODEL_BASE_DIR}-Current Model: {self.MODEL_DIR}\n-Current Model name: {self.MODEL_SAVE_PATH}\n\nFigure will be saved per {self.N_STEP_FIG}-step\n')
+        
         os.makedirs(self.BASE_DIR, exist_ok=True)
         os.makedirs(self.MODEL_BASE_DIR, exist_ok=True)
         os.makedirs(self.DATA_DIR, exist_ok=True)
