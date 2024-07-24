@@ -14,6 +14,8 @@ from scipy.spatial.distance import cosine
 
 import torch.nn.functional as F
 
+from data_utils import get_logits_from_output
+
 def compute_layer_similarity(activations, device):
     n_layers = len(activations)
     similarity_matrix = torch.zeros((n_layers, n_layers), device=device)
@@ -72,7 +74,7 @@ def perform_rsa(model, data_loader, device):
     # Combine activations from all batches
     combined_activations = [np.concatenate([batch[i] for batch in all_activations]) for i in range(len(all_activations[0]))]
     
-    layer_similarity_matrix = compute_layer_similarity(combined_activations)
+    layer_similarity_matrix = compute_layer_similarity(combined_activations, device)
     
     labels = np.array(labels)
     label_matrix = np.equal.outer(labels, labels).astype(int)
@@ -92,17 +94,7 @@ def perform_rsa(model, data_loader, device):
     return fig
 
 
-def get_logits_from_output(outputs):
-    if isinstance(outputs, dict):
-        return outputs.get('logits', outputs.get('last_hidden_state'))
-    elif isinstance(outputs, torch.Tensor):
-        return outputs  # 이미 로짓 텐서인 경우
-    elif hasattr(outputs, 'logits'):
-        return outputs.logits
-    elif hasattr(outputs, 'last_hidden_state'):
-        return outputs.last_hidden_state
-    else:
-        raise ValueError("Unexpected output format from the model")
+
 
 # def visualize_metric(model, data_loader):
 #     fig = plot_confusion_matrix(all_labels, all_preds, config.LABELS_EMOTION)
@@ -116,27 +108,6 @@ def save_and_log_figure(stage, fig, config, name, title):
     
 def visualize_results(config, model, data_loader, device, log_data, stage):
     print('\nVisualization of results starts.\n')
-    if stage in ['train', 'val'] and log_data:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-        try:
-            epochs = [entry['epoch'] for entry in log_data[stage]]
-            losses = [entry['loss'] for entry in log_data[stage]]
-            accuracies = [entry['accuracy'] for entry in log_data[stage]]
-            
-            ax1.plot(epochs, losses, 'bo-')
-            ax1.set_title(f'{stage.capitalize()} Loss')
-            ax1.set_xlabel('Epochs')
-            ax1.set_ylabel('Loss')
-            
-            ax2.plot(epochs, accuracies, 'ro-')
-            ax2.set_title(f'{stage.capitalize()} Accuracy')
-            ax2.set_xlabel('Epochs')
-            ax2.set_ylabel('Accuracy')
-            
-            save_and_log_figure(stage, fig, config, "learning_curves", f"{stage.capitalize()} Learning Curves")
-            plt.close(fig)
-        except:
-            print('Err. no learning curve.')
 
     # Confusion Matrix and Embeddings visualization for all stages
     model.eval()
@@ -153,14 +124,19 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
                 inputs, labels = batch
                 inputs = inputs.to(device)
                 labels = labels.to(device)  # labels도 device로 이동
-            outputs = model(inputs)
-            logits = get_logits_from_output(outputs)
+            outputs, penultimate_features = model(inputs)
+            try:
+                logits = get_logits_from_output(outputs)
+            except Exception as e:
+                print(f'Error in get_logits_from_output during visualization: {e}')
+                logits = outputs  # 오류 발생 시 원래 출력을 사용
+                
             _, preds = torch.max(logits, 1) 
             #_, preds = torch.max(outputs.logits, 1)
             
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
-            all_embeddings.extend(outputs.logits.cpu().numpy())
+            all_embeddings.extend(penultimate_features.cpu().numpy())
 
     # Convert lists to numpy arrays
     all_preds = np.array(all_preds)
@@ -191,6 +167,28 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
     fig_rsa = perform_rsa(model, data_loader, config.device)
     save_and_log_figure(stage, fig_rsa, config, "Representation_similarity", f"{stage.capitalize()}")
     plt.close(fig_rsa)
+    
+    if stage in ['train', 'val'] and log_data:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+        try:
+            epochs = [entry['epoch'] for entry in log_data[stage]]
+            losses = [entry['loss'] for entry in log_data[stage]]
+            accuracies = [entry['accuracy'] for entry in log_data[stage]]
+            
+            ax1.plot(epochs, losses, 'bo-')
+            ax1.set_title(f'{stage.capitalize()} Loss')
+            ax1.set_xlabel('Epochs')
+            ax1.set_ylabel('Loss')
+            
+            ax2.plot(epochs, accuracies, 'ro-')
+            ax2.set_title(f'{stage.capitalize()} Accuracy')
+            ax2.set_xlabel('Epochs')
+            ax2.set_ylabel('Accuracy')
+            
+            save_and_log_figure(stage, fig, config, "learning_curves", f"{stage.capitalize()} Learning Curves")
+            plt.close(fig)
+        except:
+            print('Err. no learning curve.')
     
     
 def extract_embeddings_and_predictions(model, data_loader, device):

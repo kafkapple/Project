@@ -5,6 +5,7 @@ import wandb
 import os
 from collections import namedtuple
 from visualization import visualize_results
+from data_utils import get_logits_from_output
 
 
 def evaluate_baseline(model, X_test, y_test, config):
@@ -154,22 +155,24 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
     
     progress_bar = tqdm(dataloader, desc="Training")
     for batch in progress_bar:
-        features = batch['audio']
-        batch_labels = batch['label']
+        features = batch['audio'].to(device)
+        batch_labels = batch['label'].to(device)
         if config.VISUALIZE:
             print(f"Features shape: {features.shape}")
             print(f"Labels shape: {batch_labels.shape}")
-            
-        features, batch_labels = features.to(device), batch_labels.to(device)
-        
-        if config.VISUALIZE:
             for name, module in model.named_modules():
                 if isinstance(module, torch.nn.BatchNorm1d):
                     print(f"{name} - mean: {module.running_mean.mean().item():.4f}, var: {module.running_var.mean().item():.4f}")
         
         optimizer.zero_grad()
-        outputs = model(features)
-        loss = criterion(outputs, batch_labels)
+        outputs, _ = model(features)
+        try:
+            logits = get_logits_from_output(outputs)
+        except Exception as e:
+            print(f'Error in get_logits_from_output during training: {e}')
+            logits = outputs  # 오류 발생 시 원래 출력을 사용
+  
+        loss = criterion(logits, batch_labels)
         loss.backward()
         
         if config.GRADIENT_CLIP:
@@ -180,7 +183,7 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
         optimizer.step()
 
         running_loss += loss.item()
-        _, predicted = torch.max(outputs, 1)
+        _, predicted = torch.max(logits, 1)
         all_preds.extend(predicted.cpu().numpy())
         all_labels.extend(batch_labels.cpu().numpy())
         
@@ -210,19 +213,22 @@ def evaluate_model(config, model, dataloader, criterion, device):
     
     with torch.no_grad():
         for batch in dataloader:
-            features = batch['audio']
-            batch_labels = batch['label']
-            
+            features = batch['audio'].to(device)
+            batch_labels = batch['label'].to(device)
             if config.VISUALIZE:
                 print(f"Features shape: {features.shape}")
                 print(f"Labels shape: {batch_labels.shape}")
-
         # for features, batch_labels in tqdm(dataloader, desc="Evaluating"):
-            features, batch_labels = features.to(device), batch_labels.to(device)
-            outputs = model(features)
-            loss = criterion(outputs, batch_labels)
+            outputs, _ = model(features)
+            try:
+                logits = get_logits_from_output(outputs)
+            except Exception as e:
+                print(f'Error in get_logits_from_output during evaluation: {e}')
+                logits = outputs  # 오류 발생 시 원래 출력을 사용
+            
+            loss = criterion(logits, batch_labels)
             running_loss += loss.item()
-            _, predicted = torch.max(outputs, 1)
+            _, predicted = torch.max(logits, 1)
             all_preds.extend(predicted.cpu().numpy())
             all_labels.extend(batch_labels.cpu().numpy())
     

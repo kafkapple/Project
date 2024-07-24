@@ -34,6 +34,17 @@ import os
 from tqdm import tqdm
 import moviepy.editor as mp
 
+def get_logits_from_output(outputs):
+    if isinstance(outputs, dict):
+        return outputs.get('logits', outputs.get('last_hidden_state', outputs))
+    elif isinstance(outputs, torch.Tensor):
+        return outputs  # 이미 로짓 텐서인 경우
+    elif hasattr(outputs, 'logits'):
+        return outputs.logits
+    elif hasattr(outputs, 'last_hidden_state'):
+        return outputs.last_hidden_state
+    else:
+        return outputs  # 예상치 못한 형식이지만 그대로 반환
 
 def prep_audio(config, text_train_df, destination_base_path, TARGET):  # by Lek Hong
     

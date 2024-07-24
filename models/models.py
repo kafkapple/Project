@@ -309,6 +309,55 @@ class EmotionRecognitionModel_v2(EmotionRecognitionBase):
         x = self.fc4(x)
         return x
 
+# class EmotionRecognitionWithWav2Vec(nn.Module):
+#     def __init__(self, num_classes, config, dropout_rate=0.5, activation='relu', use_wav2vec=True, input_size=None):
+#         super().__init__()
+        
+#         self.use_wav2vec = use_wav2vec
+#         self.config = config
+        
+#         if use_wav2vec:
+#             # wav2vec 모델 로드
+#             self.wav2vec = Wav2Vec2Model.from_pretrained(self.config.path_pretrained)#"facebook/wav2vec2-base")
+#             self.wav2vec.config.mask_time_length = config.mask_time_length
+#             wav2vec_output_size = self.wav2vec.config.hidden_size
+#         else:
+#             # wav2vec을 사용하지 않을 경우의 입력 크기 (예: MFCC 특징의 크기)
+#             wav2vec_output_size = input_size#self.wav2vec.config.hidden_size#40  # 예시 값, 실제 입력 크기에 맞게 조정 필요
+        
+#         # EmotionRecognitionModel_v2 인스턴스화
+#         self.emotion_classifier = EmotionRecognitionModel_v2(
+#             input_size=wav2vec_output_size,
+#             num_classes=num_classes,
+#             dropout_rate=dropout_rate,
+#             activation=activation
+#         )
+        
+#     def forward(self, input_values):
+#         if self.use_wav2vec:
+#             if self.config.VISUALIZE:
+#                 print(f"Input shape before processing: {input_values.shape}")
+#             # 입력 데이터 형태 조정
+#             if input_values.dim() == 4:
+#                 input_values = input_values.squeeze(2)  # [batch, 1, 1, sequence] -> [batch, 1, sequence]
+#             if input_values.dim() == 3:
+#                 input_values = input_values.squeeze(1)  # [batch, 1, sequence] -> [batch, sequence]
+#             # wav2vec 특징 추출
+#             if self.config.VISUALIZE:
+#                 print(f"Input shape after processing: {input_values.shape}")
+#             wav2vec_outputs = self.wav2vec(input_values).last_hidden_state
+#             # 시퀀스의 평균을 취하여 고정 크기 벡터 얻기
+#             features = torch.mean(wav2vec_outputs, dim=1)
+#         else:
+#             # wav2vec을 사용하지 않을 경우, 입력을 그대로 사용
+#             #features = input_values
+#             features = input_values.view(input_values.size(0), -1)  # Flatten the input
+        
+#         # 감정 분류
+#         emotion_logits = self.emotion_classifier(features)
+        
+#         return emotion_logits
+
 class EmotionRecognitionWithWav2Vec(nn.Module):
     def __init__(self, num_classes, config, dropout_rate=0.5, activation='relu', use_wav2vec=True, input_size=None):
         super().__init__()
@@ -317,15 +366,12 @@ class EmotionRecognitionWithWav2Vec(nn.Module):
         self.config = config
         
         if use_wav2vec:
-            # wav2vec 모델 로드
-            self.wav2vec = Wav2Vec2Model.from_pretrained(self.config.path_pretrained)#"facebook/wav2vec2-base")
+            self.wav2vec = Wav2Vec2Model.from_pretrained(self.config.path_pretrained)
             self.wav2vec.config.mask_time_length = config.mask_time_length
             wav2vec_output_size = self.wav2vec.config.hidden_size
         else:
-            # wav2vec을 사용하지 않을 경우의 입력 크기 (예: MFCC 특징의 크기)
-            wav2vec_output_size = input_size#self.wav2vec.config.hidden_size#40  # 예시 값, 실제 입력 크기에 맞게 조정 필요
+            wav2vec_output_size = input_size
         
-        # EmotionRecognitionModel_v2 인스턴스화
         self.emotion_classifier = EmotionRecognitionModel_v2(
             input_size=wav2vec_output_size,
             num_classes=num_classes,
@@ -337,28 +383,25 @@ class EmotionRecognitionWithWav2Vec(nn.Module):
         if self.use_wav2vec:
             if self.config.VISUALIZE:
                 print(f"Input shape before processing: {input_values.shape}")
-            # 입력 데이터 형태 조정
             if input_values.dim() == 4:
-                input_values = input_values.squeeze(2)  # [batch, 1, 1, sequence] -> [batch, 1, sequence]
+                input_values = input_values.squeeze(2)
             if input_values.dim() == 3:
-                input_values = input_values.squeeze(1)  # [batch, 1, sequence] -> [batch, sequence]
-            # wav2vec 특징 추출
+                input_values = input_values.squeeze(1)
             if self.config.VISUALIZE:
                 print(f"Input shape after processing: {input_values.shape}")
             wav2vec_outputs = self.wav2vec(input_values).last_hidden_state
-            # 시퀀스의 평균을 취하여 고정 크기 벡터 얻기
             features = torch.mean(wav2vec_outputs, dim=1)
         else:
-            # wav2vec을 사용하지 않을 경우, 입력을 그대로 사용
-            #features = input_values
-            features = input_values.view(input_values.size(0), -1)  # Flatten the input
+            features = input_values.view(input_values.size(0), -1)
         
-        # 감정 분류
-        emotion_logits = self.emotion_classifier(features)
+        # EmotionRecognitionModel_v2의 각 층을 통과
+        x = self.emotion_classifier.activation(self.emotion_classifier.bn1(self.emotion_classifier.fc1(features)))
+        x = self.emotion_classifier.dropout(x)
+        x = self.emotion_classifier.activation(self.emotion_classifier.bn2(self.emotion_classifier.fc2(x)))
+        x = self.emotion_classifier.dropout(x)
+        x = self.emotion_classifier.activation(self.emotion_classifier.bn3(self.emotion_classifier.fc3(x)))
+        penultimate_features = self.emotion_classifier.dropout(x) # penultimate_features는 마지막 fully connected layer (fc4) 직전의 특징
         
-        return emotion_logits
-
-# 모델 초기화 예시
-
-
-# 모델 초기화 예시
+        emotion_logits = self.emotion_classifier.fc4(penultimate_features)
+        
+        return emotion_logits, penultimate_features

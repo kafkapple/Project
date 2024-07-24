@@ -170,7 +170,7 @@ class Config:
         
         self.MODEL_BASE_DIR=os.path.join(self.BASE_DIR, 'models')
         self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, f"{self.MODEL}_{self.DATA_NAME}")
-        self.MODEL_PRE_BASE_DIR = os.path.join(self.MODEL_BASE_DIR, 'pretrained')
+        self.MODEL_PRE_BASE_DIR = os.path.join(self.MODEL_BASE_DIR, 'finetuned')
         os.makedirs(self.MODEL_PRE_BASE_DIR, exist_ok=True)
         ####
         #self.path_pretrained = os.path.join(self.MODEL_BASE_DIR, 'wav2vec_I_fine_tune_best')
