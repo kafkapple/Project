@@ -34,7 +34,7 @@ class Config:
     lr: float = 0.0005
     # Model settings
     DATA_NAME= "MELD"#"RAVDESS"#_audio_speech"
-    MODEL: str = "wav2vec_finetuned"#"wav2vec_pretrained"#"wav2vec_v2" "classifer" "wav2vec_finetuned"
+    MODEL: str = "wav2vec_pretrained"#"wav2vec_v2" "classifer" "wav2vec_finetuned"
     model_name: str = ''
     
     path_best="facebook/wav2vec2-base" # model pretrained
