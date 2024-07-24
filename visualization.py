@@ -127,7 +127,12 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
                 inputs, labels = batch
                 inputs = inputs.to(device)
                 labels = labels.to(device)  # labels도 device로 이동
-            outputs, penultimate_features = model(inputs)
+            try:
+                outputs, penultimate_features = model(inputs)
+            except:
+                outputs = model(inputs)
+                penultimate_features = outputs.hidden_states[-2] # penultimate layer
+                
             try:
                 logits = get_logits_from_output(outputs)
             except Exception as e:
