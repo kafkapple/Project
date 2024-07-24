@@ -165,10 +165,15 @@ class Config:
         sys.path.insert(0, project_dir)
         
         self.BASE_DIR = project_dir#os.path.join(os.path.dirname(os.getcwd()), self.PROJECT_DIR)
-        
         self.DATA_DIR = os.path.join(self.BASE_DIR, 'data')
-        
         self.MODEL_BASE_DIR=os.path.join(self.BASE_DIR, 'models')
+        os.makedirs(self.BASE_DIR, exist_ok=True)
+        os.makedirs(self.MODEL_BASE_DIR, exist_ok=True)
+        os.makedirs(self.DATA_DIR, exist_ok=True)
+        self.update_path()
+        
+    def update_path(self):
+        
         self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, f"{self.MODEL}_{self.DATA_NAME}")
         self.MODEL_PRE_BASE_DIR = os.path.join(self.MODEL_BASE_DIR, 'finetuned')
         os.makedirs(self.MODEL_PRE_BASE_DIR, exist_ok=True)
@@ -182,10 +187,9 @@ class Config:
 
         print(f'\n\n##### Current Project Location #####\n-Base Directory: {self.BASE_DIR}\n-Data: {self.DATA_DIR}\n-Models: {self.MODEL_BASE_DIR}-Current Model: {self.MODEL_DIR}\n-Current Model name: {self.MODEL_SAVE_PATH}\n\nFigure will be saved per {self.N_STEP_FIG}-step\n')
         
-        os.makedirs(self.BASE_DIR, exist_ok=True)
-        os.makedirs(self.MODEL_BASE_DIR, exist_ok=True)
-        os.makedirs(self.DATA_DIR, exist_ok=True)
         os.makedirs(self.MODEL_DIR, exist_ok=True)
+        os.makedirs(self.MODEL_PRE_BASE_DIR, exist_ok=True)
+        
         
     # def __setattr__(self, name:str, value: any) -> None:
     #     if hasattr(self, name):

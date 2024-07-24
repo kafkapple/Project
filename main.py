@@ -158,6 +158,8 @@ def main(args=None):
             config.MODEL = "wav2vec_finetuned"
         else:
             print('ERR')
+            
+        config.update_path()
          #data_dir = load_data(config) 
         data_dir = os.path.join(config.DATA_DIR, config.DATA_NAME)
         print('Data Dir: ', data_dir)
