@@ -105,6 +105,8 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
     fig_rsa = perform_rsa(model, data_loader, config.device)
     save_and_log_figure(stage, fig_rsa, config, "Representation_similarity", f"{stage.capitalize()}")
     plt.close(fig_rsa)
+    
+    
 def extract_embeddings_and_predictions(model, data_loader, device):
     model.eval()
     all_embeddings = []
@@ -122,7 +124,6 @@ def extract_embeddings_and_predictions(model, data_loader, device):
             logits = model.classifier(pooled_output)
             
             # predictions = outputs.argmax(dim=1).cpu().numpy()
-            
             
             all_embeddings.extend(pooled_output.cpu().numpy())
             all_labels.extend(labels.numpy())

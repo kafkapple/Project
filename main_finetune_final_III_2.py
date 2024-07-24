@@ -34,6 +34,7 @@ def load_model(model, path):
     else:
         model.load_state_dict(torch.load(os.path.join(path, 'model.pt')))
         return model
+    
 def get_logits_from_output(outputs):
     if isinstance(outputs, dict):
         return outputs.get('logits', outputs.get('last_hidden_state'))
@@ -209,8 +210,6 @@ class Wav2Vec2ClassifierModel(nn.Module):
             nn.Dropout(dropout),
             nn.Linear(256, num_labels)
         )
-        
-
     
     def forward(self, input_values):
         outputs = self.wav2vec2(input_values)

@@ -210,8 +210,6 @@ class Wav2Vec2ClassifierModel(nn.Module):
             nn.Linear(256, num_labels)
         )
         
-
-    
     def forward(self, input_values):
         outputs = self.wav2vec2(input_values)
         hidden_states = outputs.last_hidden_state
