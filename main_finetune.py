@@ -125,6 +125,6 @@ for epoch in tqdm(range(num_epochs)):
     # print(f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Val F1: {val_f1:.4f}")
     #print("-" * 50)
 
-model.save_pretrained("./wav2vec2_emotion_model")
+model.save_pretrained("./models/fine_tuning/wav2vec2")
 gc.collect()
 torch.cuda.empty_cache()

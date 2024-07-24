@@ -18,6 +18,10 @@ from data_utils import preprocess_data_meld
 from visualization import visualize_results
 from train_utils import log_metrics
 import torch
+from torch.cuda.amp import autocast, GradScaler
+from torch.cuda.amp import autocast, GradScaler
+
+from main import init_weights
 
 gc.collect()
 torch.cuda.empty_cache()
@@ -112,41 +116,62 @@ def collate_fn(batch):
 
 def train(model, train_dataloader, val_dataloader, config):
     device = config.device
+    scaler = GradScaler()
     best_val_f1 = 0
     log_data = {
         'train': {'loss': [], 'accuracy': [], 'f1': []},
         'val': {'loss': [], 'accuracy': [], 'f1': []}
     }
-    
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr)
+    optimizer_grouped_parameters = [
+    {'params': model.wav2vec2.parameters(), 'lr': 1e-5, 'weight_decay':config.weight_decay},
+    {'params': model.classifier.parameters(), 'lr': 1e-3, 'weight_decay':config.weight_decay}
+    ]
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters)
+    criterion = nn.CrossEntropyLoss(label_smoothing=config.label_smoothing)
+    # optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     
     path_best = f"{os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)+'_best'}"
     os.makedirs(path_best, exist_ok=True)
     config.path_best = path_best
     
     for epoch in tqdm(range(config.NUM_EPOCHS)):
+      
+        if epoch == 5:
+            unfreeze_layers(model, 6)  # 5번째 에폭 후 6개 레이어 동결 해제
+        elif epoch == 10:
+            unfreeze_layers(model, 9)  # 10번째 에폭 후 9개 레이어 동결 해제
         model.train()
         total_loss = 0
         all_preds = []
         all_labels = []
         
-        for batch in train_dataloader:
+        scaler = GradScaler()
+        accumulation_steps = 1  # 실제 배치 크기 = 4 * 4 = 32
+
+        for i, batch in enumerate(train_dataloader):
             audio_input = batch['audio'].to(device)
             labels = batch['label'].to(device)
 
-            outputs = model(audio_input)
-            logits = get_logits_from_output(outputs)#outputs.logits#['logits']
-            loss = criterion(logits, labels)
-            
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            total_loss += loss.item()
-            
-            preds = torch.argmax(logits, dim=1)
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
+            with autocast():
+                outputs = model(audio_input)
+                logits = get_logits_from_output(outputs)
+                loss = criterion(logits, labels)
+                loss = loss / accumulation_steps
+
+            scaler.scale(loss).backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
+            if (i + 1) % accumulation_steps == 0:
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()  # 그라디언트 초기화 추가
+
+            total_loss += loss.item() * accumulation_steps  # 원래 손실값으로 환산
+
+            with torch.no_grad():
+                preds = torch.argmax(logits, dim=1)
+                all_preds.extend(preds.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
 
         avg_train_loss = total_loss / len(train_dataloader)
         train_accuracy = accuracy_score(all_labels, all_preds)
@@ -218,6 +243,17 @@ class Wav2Vec2ClassifierModel(nn.Module):
         pooled_output = torch.mean(hidden_states, dim=1)
         logits = self.classifier(pooled_output)
         return logits  # 직접 logits를 반환
+def unfreeze_layers(model, num_layers):
+    for param in model.parameters():
+        param.requires_grad = False
+    
+    for i, layer in enumerate(reversed(list(model.wav2vec2.encoder.layers))):
+        if i < num_layers:
+            for param in layer.parameters():
+                param.requires_grad = True
+        else:
+            break
+
 
 ### 
 config=Config()
@@ -259,43 +295,52 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # model.to(device)
 config.device = device
 
-# ###### I.
-# # Fine-tuning 및 성능 기록
-# config.model_name= 'wav2vec_I'
-# model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
-# model.to(device)
-# config.lr =1e-4
-# # wandb log
-# config.WANDB_PROJECT='wav2vec_I_fine_tune'
-# config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
-# os.makedirs(config.MODEL_DIR, exist_ok=True)
+###### I.
+# Fine-tuning 및 성능 기록
+config.model_name= 'wav2vec_I'
 
-# config_wandb = {'lr': config.lr,
-#                 'n_batch': n_batch
-#                 }
-# id_wandb = wandb.util.generate_id()
-# print(f'Wandb id generated: {id_wandb}')
-# config.id_wandb = id_wandb
-# wandb.init(id=id_wandb, project=config.WANDB_PROJECT)#, config=config.CONFIG_DEFAULTS)
+model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
+    
+#model.classifier = nn.Linear(model.config.hidden_size, n_labels)
+model.to(device)
 
-# model, log_data = train(model, train_dataloader, val_dataloader, config)
-# # 최종 모델 저장
-# new_path=os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
-# os.makedirs(new_path, exist_ok=True)
-# try:
-#     save_model(model, new_path)
-#     #model.save_pretrained(os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
-# except:
-#     print('save err')
-#     # torch.save(model.state_dict(), os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
+for param in model.parameters():
+    param.requires_grad = False
 
-# # 학습 로그 저장
-# timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-# save_log(log_data, f"training_log_{timestamp}.json")
 
-# gc.collect()
-# torch.cuda.empty_cache()
-# wandb.finish()
+config.lr =1e-4
+# wandb log
+config.WANDB_PROJECT='wav2vec_I_fine_tune'
+config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
+os.makedirs(config.MODEL_DIR, exist_ok=True)
+
+config_wandb = {'lr': config.lr,
+                'n_batch': n_batch
+                }
+id_wandb = wandb.util.generate_id()
+print(f'Wandb id generated: {id_wandb}')
+config.id_wandb = id_wandb
+wandb.init(id=id_wandb, project=config.WANDB_PROJECT)#, config=config.CONFIG_DEFAULTS)
+
+#model.apply(init_weights)   
+model, log_data = train(model, train_dataloader, val_dataloader, config)
+# 최종 모델 저장
+new_path=os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
+os.makedirs(new_path, exist_ok=True)
+try:
+    save_model(model, new_path)
+    #model.save_pretrained(os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
+except:
+    print('save err')
+    # torch.save(model.state_dict(), os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT))
+
+# 학습 로그 저장
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+save_log(log_data, f"training_log_{timestamp}.json")
+
+gc.collect()
+torch.cuda.empty_cache()
+wandb.finish()
 
 config.NUM_EPOCHS = 60
 config.model_name = 'wav2vec_II'
@@ -303,12 +348,12 @@ config.lr = 5e-5
 config.DROPOUT_RATE = 0.4
 
 # for temp
-config.path_best = os.path.join(config.MODEL_BASE_DIR, 'wav2vec2_finetuned')
+#config.path_best = os.path.join(config.MODEL_BASE_DIR, 'wav2vec2_finetuned')
 print(config.path_best)
 new_model = Wav2Vec2ClassifierModel(config, num_labels=n_labels, dropout=config.DROPOUT_RATE)
 new_model.to(device)
 
-config.WANDB_PROJECT = 'wav2vec_II_classifier_0'
+config.WANDB_PROJECT = 'wav2vec_II_classifier'
 config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
 os.makedirs(config.MODEL_DIR, exist_ok=True)
 

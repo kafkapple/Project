@@ -21,7 +21,16 @@ import torch
 
 gc.collect()
 torch.cuda.empty_cache()
-
+def unfreeze_layers(model, num_layers):
+    for param in model.parameters():
+        param.requires_grad = False
+    
+    for i, layer in enumerate(reversed(list(model.wav2vec2.encoder.layers))):
+        if i < num_layers:
+            for param in layer.parameters():
+                param.requires_grad = True
+        else:
+            break
 def save_model(model, path):
     if hasattr(model, 'save_pretrained'):
         model.save_pretrained(path)
@@ -118,14 +127,24 @@ def train(model, train_dataloader, val_dataloader, config):
         'val': {'loss': [], 'accuracy': [], 'f1': []}
     }
     
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr)
+    
+    optimizer_grouped_parameters = [
+    {'params': model.wav2vec2.parameters(), 'lr': 1e-5, 'weight_decay':config.weight_decay},
+    {'params': model.classifier.parameters(), 'lr': 1e-3, 'weight_decay':config.weight_decay}
+    ]
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters)
+    criterion = nn.CrossEntropyLoss(label_smoothing=config.label_smoothing)
+    
     
     path_best = f"{os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)+'_best'}"
     os.makedirs(path_best, exist_ok=True)
     config.path_best = path_best
     
     for epoch in tqdm(range(config.NUM_EPOCHS)):
+        if epoch == 5:
+            unfreeze_layers(model, 6)  # 5번째 에폭 후 6개 레이어 동결 해제
+        elif epoch == 10:
+            unfreeze_layers(model, 9)  # 10번째 에폭 후 9개 레이어 동결 해제
         model.train()
         total_loss = 0
         all_preds = []
@@ -163,11 +182,13 @@ def train(model, train_dataloader, val_dataloader, config):
         log_data['val']['accuracy'].append(val_accuracy)
         log_data['val']['f1'].append(val_f1)
         
+        
         print(f"Epoch {epoch+1}/{config.NUM_EPOCHS}:")
         print(f"Train Loss: {avg_train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}, Train F1: {train_f1:.4f}")
         print(f"Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.4f}, Val F1: {val_f1:.4f}")
         
         config.global_epoch = epoch + 1
+        log_data['epoch'].append(config.global_epoch)
         visualize_results(config, model, val_dataloader, device, log_data, 'val')
         log_metrics('train', log_data['train'], config.global_epoch)
         log_metrics('val', log_data['val'], config.global_epoch)
@@ -264,7 +285,12 @@ config.device = device
 config.model_name= 'wav2vec_I'
 model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels)
 model.to(device)
+for param in model.parameters():
+    param.requires_grad = False
+n_unfreeze=3
+unfreeze_layers(model, n_unfreeze)
 config.lr =1e-4
+
 # wandb log
 config.WANDB_PROJECT='wav2vec_I_fine_tune'
 config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
@@ -303,12 +329,12 @@ config.lr = 5e-5
 config.DROPOUT_RATE = 0.4
 
 # for temp
-#config.path_best = os.path.join(config.MODEL_BASE_DIR, 'wav2vec2_finetuned')
+config.path_best = os.path.join(config.MODEL_BASE_DIR, 'wav2vec2_finetuned')
 print(config.path_best)
 new_model = Wav2Vec2ClassifierModel(config, num_labels=n_labels, dropout=config.DROPOUT_RATE)
 new_model.to(device)
 
-config.WANDB_PROJECT = 'wav2vec_II_classifier'
+config.WANDB_PROJECT = 'wav2vec_II_classifier_0'
 config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
 os.makedirs(config.MODEL_DIR, exist_ok=True)
 
