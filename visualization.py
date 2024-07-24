@@ -22,7 +22,6 @@ import torch
 from data_utils import get_logits_from_output
 import torch
 import torch.nn.functional as F
-from collections import OrderedDict
 
 def get_layer_activations(model, inputs, num_layers=5):
     activations = OrderedDict()
@@ -30,20 +29,25 @@ def get_layer_activations(model, inputs, num_layers=5):
     def hook(name):
         def hook_fn(module, input, output):
             if isinstance(output, torch.Tensor):
-                activations[name] = output.detach()
+                if name not in activations:
+                    activations[name] = []
+                activations[name].append(output.detach())
             elif isinstance(output, tuple) and isinstance(output[0], torch.Tensor):
-                activations[name] = output[0].detach()
+                if name not in activations:
+                    activations[name] = []
+                activations[name].append(output[0].detach())
         return hook_fn
 
     hooks = []
-    # 모든 named_modules에 대해 훅 등록
-    if hasattr(model, 'wav2vec'):
-        for name, module in model.wav2vec.named_modules():
-            if isinstance(module, (torch.nn.Linear, torch.nn.Conv1d)):
-                hooks.append(module.register_forward_hook(hook(f'wav2vec_{name}')))
-    for name, module in model.named_modules():
-        if isinstance(module, (torch.nn.Linear, torch.nn.Conv1d, torch.nn.Conv2d)):
-            hooks.append(module.register_forward_hook(hook(name)))
+    # 모델 구조 탐색 및 후크 등록
+    def register_hooks(module, prefix=''):
+        for name, child in module.named_children():
+            full_name = f"{prefix}.{name}" if prefix else name
+            if isinstance(child, (torch.nn.Linear, torch.nn.Conv1d, torch.nn.Conv2d)):
+                hooks.append(child.register_forward_hook(hook(full_name)))
+            register_hooks(child, full_name)
+
+    register_hooks(model)
 
     with torch.no_grad():
         _ = model(inputs)
@@ -51,8 +55,38 @@ def get_layer_activations(model, inputs, num_layers=5):
     for h in hooks:
         h.remove()
 
+    # 활성화 처리
+    processed_activations = OrderedDict()
+    for name, acts in activations.items():
+        if acts:  # 활성화가 있는 경우에만 처리
+            processed_activations[name] = torch.cat(acts, dim=0)
+
+    print("Captured activations:", list(processed_activations.keys()))
+
     # 마지막 num_layers개의 레이어만 선택
-    return OrderedDict(list(activations.items())[-num_layers:])
+    return OrderedDict(list(processed_activations.items())[-num_layers:])
+# def get_layer_activations(model, inputs, num_layers=5):
+#     model.eval()
+#     with torch.no_grad():
+#         if hasattr(model, 'wav2vec'):
+#             wav2vec_output = model.wav2vec(inputs).last_hidden_state
+#             features = torch.mean(wav2vec_output, dim=1)
+#         else:
+#             features = inputs.view(inputs.size(0), -1)
+        
+#         activations = OrderedDict()
+#         activations['input'] = features
+        
+#         x = features
+#         for i, layer in enumerate(['fc1', 'fc2', 'fc3', 'fc4']):
+#             fc_layer = getattr(model.emotion_classifier, layer)
+#             x = fc_layer(x)
+#             if i < 3:  # fc4 이전의 레이어에 대해서만 활성화 함수 적용
+#                 x = model.emotion_classifier.activation(x)
+#                 x = model.emotion_classifier.dropout(x)
+#             activations[f'fc{i+1}'] = x
+    
+#     return OrderedDict(list(activations.items())[-num_layers:])
 
 def compute_layer_similarity(activations):
     layer_names = list(activations.keys())
@@ -88,6 +122,9 @@ def perform_rsa(model, data_loader, device, num_layers=5):
                 inputs = inputs.squeeze(1)
 
             batch_activations = get_layer_activations(model, inputs, num_layers)
+            
+            print("Batch activations keys:", list(batch_activations.keys()))
+            print("Batch activations shapes:", {k: v.shape for k, v in batch_activations.items()})
             
             if all_activations is None:
                 all_activations = {name: [] for name in batch_activations.keys()}
