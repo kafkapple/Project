@@ -11,7 +11,9 @@ import pandas as pd
 from tqdm import tqdm
 import os
 from scipy.spatial.distance import cosine
-
+import torch
+from collections import OrderedDict
+from transformers.modeling_outputs import SequenceClassifierOutput
 import torch.nn.functional as F
 
 from data_utils import get_logits_from_output
@@ -43,9 +45,6 @@ def compute_layer_similarity(activations, device):
             #dim=2: 마지막 차원(특성 차원)을 따라 코사인 유사도를 계산합니다.
 
 
-import torch
-from collections import OrderedDict
-
 def get_layer_activations(model, inputs, num_layers_from_end=None):
     activations = OrderedDict()
     handles = []
@@ -65,7 +64,7 @@ def get_layer_activations(model, inputs, num_layers_from_end=None):
         return hook_fn
 
     try:
-        # 모든 모듈에 대해 훅 등록
+        # 모든 모듈에 대해 후크 등록
         for name, module in model.named_modules():
             handles.append(module.register_forward_hook(hook(name)))
 
@@ -82,7 +81,7 @@ def get_layer_activations(model, inputs, num_layers_from_end=None):
             print(f"Warning: Unexpected model output type: {type(outputs)}")
 
     finally:
-        # 모든 훅 제거
+        # 모든 후크 제거
         for handle in handles:
             handle.remove()
 
@@ -96,47 +95,39 @@ def get_layer_activations(model, inputs, num_layers_from_end=None):
 
     return selected_activations
 
-# def get_all_layer_activations(model, inputs):
-#     activations = OrderedDict()
-#     handles = []
+def perform_rsa(model, data_loader, device):
+    model.eval()
+    all_activations = []
+    num_layers_from_end = 5
 
-#     def hook(name):
-#         def hook_fn(module, input, output):
-#             if isinstance(output, torch.Tensor):
-#                 activations[name] = output.detach()
-#             elif isinstance(output, tuple) and isinstance(output[0], torch.Tensor):
-#                 activations[name] = output[0].detach()
-#             elif hasattr(output, 'last_hidden_state'):
-#                 activations[name] = output.last_hidden_state.detach()
-#             elif isinstance(output, SequenceClassifierOutput):
-#                 activations[name] = output.logits.detach()
-#             else:
-#                 print(f"Warning: Unexpected output type for layer {name}: {type(output)}")
-#         return hook_fn
+    with torch.no_grad():
+        for batch in tqdm(data_loader, desc="Collecting activations"):
+            inputs = batch['audio'].to(device)
+            batch_activations = get_layer_activations(model, inputs, num_layers_from_end)
+            all_activations.append(batch_activations)
 
-#     try:
-#         # 모든 모듈에 대해 훅 등록
-#         for name, module in model.named_modules():
-#             handles.append(module.register_forward_hook(hook(name)))
+    # 모든 배치의 활성화를 결합
+    combined_activations = {name: torch.cat([b[name] for b in all_activations], dim=0) for name in all_activations[0]}
 
-#         # 모델 실행
-#         with torch.no_grad():
-#             outputs = model(inputs)
+    # combined_activations의 형태 확인
+    for name, act in combined_activations.items():
+        print(f"Layer {name} activation shape: {act.shape}")
 
-#         # 모델의 최종 출력 처리
-#         if isinstance(outputs, SequenceClassifierOutput):
-#             activations['model_output'] = outputs.logits.detach()
-#         elif isinstance(outputs, torch.Tensor):
-#             activations['model_output'] = outputs.detach()
-#         else:
-#             print(f"Warning: Unexpected model output type: {type(outputs)}")
+    layer_names = list(combined_activations.keys())
+    activations_list = [combined_activations[name] for name in layer_names]
 
-#     finally:
-#         # 모든 훅 제거
-#         for handle in handles:
-#             handle.remove()
+    # compute_layer_similarity 함수 사용
+    similarity_matrix = compute_layer_similarity(activations_list, device)
 
-#     return activations
+    # 시각화
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(similarity_matrix, xticklabels=layer_names, yticklabels=layer_names, cmap='coolwarm')
+    plt.title("Layer-wise Representation Similarity Analysis")
+    plt.xlabel("Layers")
+    plt.ylabel("Layers")
+    plt.tight_layout()
+
+    return plt.gcf()
 
 def perform_rsa(model, data_loader, device):
     model.eval()
@@ -238,13 +229,13 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
             if len(penultimate_features.shape) > 2:
                 penultimate_features = penultimate_features.mean(dim=1)  # 시퀀스 차원에 대해 평균 계산
             all_embeddings.extend(penultimate_features.cpu().numpy())
-            
+
+    # Confusion Matrix
     # Convert lists to numpy arrays
     all_preds = np.array(all_preds)
     all_labels = np.array(all_labels)
     all_embeddings = np.array(all_embeddings)
-
-    # Confusion Matrix
+    
     fig_cm = plot_confusion_matrix(all_labels, all_preds, config.LABELS_EMOTION)
     save_and_log_figure(stage, fig_cm, config, "confusion_matrix", f"{stage} Confusion Matrix")
 
@@ -259,35 +250,22 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
     try:
         fig_embd = visualize_embeddings(config, all_embeddings, all_labels)
     
-        save_and_log_figure(stage, fig_embd, config, "embeddings", f"{stage.capitalize()} Embeddings (t-SNE)")
+        save_and_log_figure(stage, fig_embd, config, "Embeddings", f"{stage.capitalize()} Embeddings (t-SNE)")
     except:
-        print('No embedding.')    
+        print('No embedding.')   
+         
     try:
         fig_rsa = perform_rsa(model, data_loader, config.device)
-        save_and_log_figure(stage, fig_rsa, config, "Representation_similarity", f"{stage.capitalize()}")
-        plt.close(fig_rsa)
+        save_and_log_figure(stage, fig_rsa, config, "Representation similarity", f"{stage.capitalize()}")
+        
     except:
-        print('RSA error')
-    if stage in ['train', 'val'] and log_data:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-        try:
-            epochs = [entry['epoch'] for entry in log_data]
-            losses = [entry['loss'] for entry in log_data[stage]]
-            accuracies = [entry['accuracy'] for entry in log_data[stage]]
-            
-            ax1.plot(epochs, losses, 'bo-')
-            ax1.set_title(f'{stage.capitalize()} Loss')
-            ax1.set_xlabel('Epochs')
-            ax1.set_ylabel('Loss')
-            
-            ax2.plot(epochs, accuracies, 'ro-')
-            ax2.set_title(f'{stage.capitalize()} Accuracy')
-            ax2.set_xlabel('Epochs')
-            ax2.set_ylabel('Accuracy')
-            
-            save_and_log_figure(stage, fig, config, "learning_curves", f"{stage.capitalize()} Learning Curves")
-        except:
-            print('Err. no learning curve.')
+        print('(Err)RSA\n')
+    
+    try:
+        fig_metric = plot_learning_curves(log_data)
+        save_and_log_figure(stage, fig_metric, config, "Learning curve", f"{stage.capitalize()}")
+    except:
+        print('(Err) learning curve\n')
     
 def visualize_embeddings(config, embeddings, labels, method='tsne'):
     print('\nVisualization of embedding starts...\n')
@@ -316,52 +294,6 @@ def visualize_embeddings(config, embeddings, labels, method='tsne'):
     return fig
 
 
-def plot_learning_curves(config):
-    # Assuming we've saved loss and accuracy values during training
-    train_losses = np.load(f"{config.MODEL_DIR}/train_losses.npy")
-    val_losses = np.load(f"{config.MODEL_DIR}/val_losses.npy")
-    train_accuracies = np.load(f"{config.MODEL_DIR}/train_accuracies.npy")
-    val_accuracies = np.load(f"{config.MODEL_DIR}/val_accuracies.npy")
-    
-    epochs = range(1, len(train_losses) + 1)
-    
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
-    
-    ax1.plot(epochs, train_losses, 'bo-', label='Training Loss')
-    ax1.plot(epochs, val_losses, 'ro-', label='Validation Loss')
-    ax1.set_title('Training and Validation Loss')
-    ax1.set_xlabel('Epochs')
-    ax1.set_ylabel('Loss')
-    ax1.legend()
-    
-    ax2.plot(epochs, train_accuracies, 'bo-', label='Training Accuracy')
-    ax2.plot(epochs, val_accuracies, 'ro-', label='Validation Accuracy')
-    ax2.set_title('Training and Validation Accuracy')
-    ax2.set_xlabel('Epochs')
-    ax2.set_ylabel('Accuracy')
-    ax2.legend()
-    
-    #plt.tight_layout()
-    img_path=f"{config.MODEL_RESULTS}/learning_curves_{config.global_epoch}.png"
-    plt.savefig(img_path)
-    wandb.log({"learning_curves": wandb.Image(img_path)})
-    
-def plot_confusion_matrix(labels, preds, labels_emotion, normalize=True):
-    cm = confusion_matrix(labels, preds)
-    if normalize:
-        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-        fmt = '.2f'
-    else:
-        fmt = 'd'
-    
-    fig, ax = plt.subplots(figsize=(10, 8))
-    sns.heatmap(cm, annot=True, fmt=fmt, cmap='Blues', xticklabels=labels_emotion.values(), yticklabels=labels_emotion.values(), ax=ax)
-    ax.set_xlabel('Predicted')
-    ax.set_ylabel('True')
-    ax.set_title('Confusion Matrix')
-    
-    return fig
-
 def plot_learning_curves(history):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
     
@@ -384,76 +316,18 @@ def plot_learning_curves(history):
     #plt.tight_layout()
     return fig
 
-
+def plot_confusion_matrix(labels, preds, labels_emotion, normalize=True):
+    cm = confusion_matrix(labels, preds)
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        fmt = '.2f'
+    else:
+        fmt = 'd'
     
-# def extract_embeddings_and_predictions(model, data_loader, device):
-#     model.eval()
-#     all_embeddings = []
-#     all_labels = []
-#     all_predictions = []
+    fig, ax = plt.subplots(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt=fmt, cmap='Blues', xticklabels=labels_emotion.values(), yticklabels=labels_emotion.values(), ax=ax)
+    ax.set_xlabel('Predicted')
+    ax.set_ylabel('True')
+    ax.set_title('Confusion Matrix')
     
-#     with torch.no_grad():
-#         for inputs, labels in data_loader:
-#             inputs = inputs.to(device)
-#             outputs = model(inputs)
-            
-#             hidden_states = outputs.last_hidden_state
-#             pooled_output = torch.mean(hidden_states, dim=1)
-            
-#             logits = model.classifier(pooled_output)
-            
-#             # predictions = outputs.argmax(dim=1).cpu().numpy()
-            
-#             all_embeddings.extend(pooled_output.cpu().numpy())
-#             all_labels.extend(labels.numpy())
-#             all_predictions.extend(labels.cpu().numpy())
-    
-#     return np.array(all_embeddings), np.array(all_labels), np.array(all_predictions)
-
-# def perform_rsa(model, data_loader, device):
-#     model.eval()
-#     all_activations = []
-#     labels = []
-#     print('rsa1')
-#     with torch.no_grad():
-#         for batch in data_loader:
-#             inputs = batch['audio'].to(device)
-#             batch_labels = batch['label']
-            
-#             activations = get_all_layer_activations(model, inputs)
-#             all_activations.append([act.cpu().numpy() for act in activations])
-#             labels.extend(batch_labels.numpy())
-#     print('rsa2')
-#     # Combine activations from all batches
-#     # 모든 배치의 활성화를 결합
-#     combined_activations = [torch.cat([batch[i] for batch in all_activations]) for i in range(len(all_activations[0]))]
-    
-#     # combined_activations의 형태 확인
-#     for i, act in enumerate(combined_activations):
-#         print(f"Layer {i} activation shape: {act.shape}")
-
-    
-#     layer_similarity_matrix = compute_layer_similarity(combined_activations, device)
-    
-#     labels = np.array(labels)
-#     label_matrix = np.equal.outer(labels, labels).astype(int)
-
-#     # Plot the layer similarity matrix and the label correlation matrix
-#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
-
-#     sns.heatmap(layer_similarity_matrix, cmap='coolwarm', ax=ax1)
-#     ax1.set_title("Layer Similarity Matrix")
-#     ax1.set_xlabel("Layers")
-#     ax1.set_ylabel("Layers")
-
-#     sns.heatmap(label_matrix, cmap='coolwarm', ax=ax2)
-#     ax2.set_title("Label Correlation Matrix")
-
-#     plt.suptitle("Layer-wise Representation Similarity Analysis", fontsize=16)
-#     return fig
-
-
-
-
-# def visualize_metric(model, data_loader):
-#     fig = plot_confusion_matrix(all_labels, all_preds, config.LABELS_EMOTION)
+    return fig

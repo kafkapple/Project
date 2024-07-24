@@ -22,7 +22,7 @@ class Config:
     device=''
     
     # monitoring
-    N_STEP_FIG: int = 2
+    N_STEP_FIG: int = 1
     N_EMBEDDINGS: int = 500 # n of embeddings to show
 
     VISUALIZE = False # during training 
