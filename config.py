@@ -44,9 +44,9 @@ class Config:
     ACTIVATION: str = "relu"
     OPTIMIZER: str = "adam"
     # For regul
-    DROPOUT_RATE: float = 0.4
+    DROPOUT_RATE: float = 0.5#0.4
     early_stop_epoch: int = 100
-    weight_decay: float =1e-5 #0.01
+    weight_decay: float = 0.1 # 1e-5 #0.01
     label_smoothing=0.1
     #momentum = 0.01
     

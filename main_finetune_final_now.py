@@ -262,7 +262,7 @@ class Wav2Vec2ClassifierModel(nn.Module):
 
 ### 
 config=Config()
-num_epochs = 30
+num_epochs = 60
 config.NUM_EPOCHS=num_epochs
 #lr=1e-4
 n_batch = 4 # 74% GPU. 8 is danger high n_batch -> small batch size -> low gpu?
@@ -314,7 +314,7 @@ print_model_info(model)
 
 # wandb log
 config.WANDB_PROJECT='wav2vec_I_fine_tune'
-config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
+config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, 'finetuned',config.WANDB_PROJECT)
 os.makedirs(config.MODEL_DIR, exist_ok=True)
 
 config_wandb = {'lr': config.lr,
