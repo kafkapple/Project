@@ -87,6 +87,8 @@ def get_layer_activations(model, inputs, num_layers=5):
 #             activations[f'fc{i+1}'] = x
     
 #     return OrderedDict(list(activations.items())[-num_layers:])
+import torch
+import torch.nn.functional as F
 
 def compute_layer_similarity(activations):
     layer_names = list(activations.keys())
@@ -105,11 +107,12 @@ def compute_layer_similarity(activations):
             act_i = normalized_activations[layer_names[i]]
             act_j = normalized_activations[layer_names[j]]
             
-            # 배치 간 코사인 유사도 계산
-            similarity = torch.mm(act_i, act_j.t())
+            # 배치 내 각 샘플 쌍에 대해 코사인 유사도 계산
+            similarity = F.cosine_similarity(act_i.unsqueeze(1), act_j.unsqueeze(0), dim=2)
             similarity_matrix[i, j] = similarity.mean()
     
     return similarity_matrix.cpu().numpy(), layer_names
+
 def perform_rsa(model, data_loader, device, num_layers=5):
     model.eval()
     all_activations = None
