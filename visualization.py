@@ -22,8 +22,37 @@ import torch
 from data_utils import get_logits_from_output
 import torch
 import torch.nn.functional as F
+from collections import Counter
 
-def get_matching_layers(model, inputs, num_layers=5):
+
+def compute_layer_similarity(activations):
+    layer_names = list(activations.keys())
+    n_layers = len(layer_names)
+    similarity_matrix = np.zeros((n_layers, n_layers))
+    
+    for i in range(n_layers):
+        for j in range(n_layers):
+            act_i = activations[layer_names[i]]
+            act_j = activations[layer_names[j]]
+            
+            # 각 활성화를 2D로 평탄화
+            flat_i = act_i.view(act_i.size(0), -1)
+            flat_j = act_j.view(act_j.size(0), -1)
+            
+            # 정규화
+            norm_i = torch.norm(flat_i, p=2, dim=1, keepdim=True)
+            norm_j = torch.norm(flat_j, p=2, dim=1, keepdim=True)
+            flat_i_normalized = flat_i / (norm_i + 1e-8)
+            flat_j_normalized = flat_j / (norm_j + 1e-8)
+            
+            # 코사인 유사도 계산
+            similarity = torch.mm(flat_i_normalized, flat_j_normalized.t())
+            
+            # 평균 유사도 계산
+            similarity_matrix[i, j] = similarity.mean().item()
+    
+    return similarity_matrix, layer_names
+def get_most_common_layers(model, inputs, num_layers=5, select_all=False):
     activations = OrderedDict()
     
     def hook(name):
@@ -45,53 +74,31 @@ def get_matching_layers(model, inputs, num_layers=5):
     for h in hooks:
         h.remove()
 
-    # 페널티메이트 레이어 찾기
-    penultimate_layer = list(activations.items())[-2]
-    penultimate_shape = penultimate_layer[1].shape[1:]  # 배치 차원 제외
-
+    # 레이어 shape 카운트
+    shape_counts = Counter(act.shape[1:] for act in activations.values())
+    
+    # 가장 흔한 shape 순으로 정렬
+    common_shapes = sorted(shape_counts.items(), key=lambda x: x[1], reverse=True)
+    
     matching_layers = OrderedDict()
-    for name, act in reversed(list(activations.items())):
-        if act.shape[1:] == penultimate_shape:
-            matching_layers[name] = act
-            if len(matching_layers) == num_layers:
-                break
+    for shape, count in common_shapes:
+        for name, act in reversed(list(activations.items())):
+            if act.shape[1:] == shape:
+                matching_layers[name] = act
+                if not select_all and len(matching_layers) == num_layers:
+                    break
+        if not select_all and len(matching_layers) == num_layers:
+            break
 
-    print(f"Matching layers found: {list(matching_layers.keys())}")
+    actual_layers = len(matching_layers)
+    if not select_all and actual_layers < num_layers:
+        print(f"Warning: Only {actual_layers} layers with matching shapes were found.")
+    
+    print(f"Most common shapes: {common_shapes[:actual_layers]}")
+    print(f"Matching layers found ({actual_layers}): {list(matching_layers.keys())}")
     return matching_layers
 
-def compute_layer_similarity(activations):
-    layer_names = list(activations.keys())
-    n_layers = len(layer_names)
-    similarity_matrix = np.zeros((n_layers, n_layers))
-    
-    for i in range(n_layers):
-        for j in range(n_layers):
-            act_i = activations[layer_names[i]]
-            act_j = activations[layer_names[j]]
-            
-            # 각 활성화를 2D로 평탄화
-            flat_i = act_i.view(act_i.size(0), -1)
-            flat_j = act_j.view(act_j.size(0), -1)
-            
-            
-            print(f"Computing similarity between {layer_names[i]} and {layer_names[j]}")
-            print(f"Shape of act_i: {act_i.shape}, Shape of act_j: {act_j.shape}")
-            
-            print(f"Shape after flattening - flat_i: {flat_i.shape}, flat_j: {flat_j.shape}")
-            # 정규화
-            norm_i = torch.norm(flat_i, p=2, dim=1, keepdim=True)
-            norm_j = torch.norm(flat_j, p=2, dim=1, keepdim=True)
-            flat_i_normalized = flat_i / (norm_i + 1e-8)
-            flat_j_normalized = flat_j / (norm_j + 1e-8)
-            # 코사인 유사도 계산
-            similarity = torch.mm(flat_i_normalized, flat_j_normalized.t())
-            
-            # 평균 유사도 계산
-            similarity_matrix[i, j] = similarity.mean().item()
-    
-    return similarity_matrix, layer_names
-
-def perform_rsa(model, data_loader, device, num_layers=5):
+def perform_rsa(model, data_loader, device, num_layers=5, select_all=False):
     model.eval()
     
     for batch in data_loader:
@@ -103,17 +110,21 @@ def perform_rsa(model, data_loader, device, num_layers=5):
         
         print("Input shape:", inputs.shape)
         
-        matching_activations = get_matching_layers(model, inputs, num_layers)
+        matching_activations = get_most_common_layers(model, inputs, num_layers, select_all)
         break  # 첫 번째 배치만 사용
 
     print("Matching activations shapes:", {k: v.shape for k, v in matching_activations.items()})
+
+    if len(matching_activations) < 2:
+        print("Error: Not enough matching layers for RSA. At least 2 layers are required.")
+        return None
 
     similarity_matrix, layer_names = compute_layer_similarity(matching_activations)
 
     plt.figure(figsize=(12, 10))
     sns.heatmap(similarity_matrix, annot=True, cmap='coolwarm', 
                 xticklabels=layer_names, yticklabels=layer_names)
-    plt.title("Layer-wise Representation Similarity Analysis")
+    plt.title(f"Layer-wise Representation Similarity Analysis ({len(layer_names)} layers)")
     plt.xticks(rotation=45, ha='right')
     plt.yticks(rotation=45)
     plt.tight_layout()
@@ -201,7 +212,7 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
         print('No embedding.')   
          
     try:
-        fig_rsa = perform_rsa(model, data_loader, config.device)
+        fig_rsa = perform_rsa(model, data_loader, config.device, select_all=True)
         save_and_log_figure(stage, fig_rsa, config, "Representation similarity", f"{stage.capitalize()}")
         
     except:
