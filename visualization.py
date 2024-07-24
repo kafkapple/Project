@@ -42,19 +42,28 @@ def get_layer_activations(model, inputs):
     activations = {}
     def hook(name):
         def hook_fn(module, input, output):
-            activations[name] = output.detach()
+            if isinstance(output, tuple):
+                # 튜플인 경우 첫 번째 요소만 사용
+                activations[name] = output[0].detach() if isinstance(output[0], torch.Tensor) else output[0]
+            elif isinstance(output, torch.Tensor):
+                activations[name] = output.detach()
+            else:
+                # 다른 타입의 출력에 대한 처리
+                activations[name] = output
         return hook_fn
     
     handles = []
     for name, module in model.named_modules():
         handles.append(module.register_forward_hook(hook(name)))
     
-    _ = model(inputs)
+    with torch.no_grad():
+        _ = model(inputs)
     
     for handle in handles:
         handle.remove()
     
     return activations
+
 def perform_rsa(model, data_loader, device):
     model.eval()
     all_activations = {}
