@@ -158,7 +158,7 @@ def train(model, train_dataloader, val_dataloader, config):
     criterion = nn.CrossEntropyLoss(label_smoothing=config.label_smoothing)
     
     
-    path_best = f"{os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)+'_best'}"
+    path_best = f"{os.path.join(config.MODEL_BASE_DIR,'finetuned', config.WANDB_PROJECT)+'_best'}"
     os.makedirs(path_best, exist_ok=True)
     config.path_best = path_best
     
@@ -310,6 +310,7 @@ for param in model.parameters():
 n_unfreeze=3
 unfreeze_layers(model, n_unfreeze)
 config.lr =1e-4
+print_model_info(model)
 
 # wandb log
 config.WANDB_PROJECT='wav2vec_I_fine_tune'
@@ -343,44 +344,45 @@ gc.collect()
 torch.cuda.empty_cache()
 wandb.finish()
 
-config.NUM_EPOCHS = 60
-config.model_name = 'wav2vec_II'
-config.lr = 5e-5
-config.DROPOUT_RATE = 0.4
+# #### II. 
+# config.NUM_EPOCHS = 60
+# config.model_name = 'wav2vec_II'
+# config.lr = 5e-5
+# config.DROPOUT_RATE = 0.4
 
-# for temp
-config.path_best = os.path.join(config.MODEL_BASE_DIR, 'wav2vec2_finetuned')
-print(config.path_best)
-new_model = Wav2Vec2ClassifierModel(config, num_labels=n_labels, dropout=config.DROPOUT_RATE)
-new_model.to(device)
+# # for temp
+# config.path_best = os.path.join(config.MODEL_BASE_DIR, 'wav2vec2_finetuned')
+# print(config.path_best)
+# new_model = Wav2Vec2ClassifierModel(config, num_labels=n_labels, dropout=config.DROPOUT_RATE)
+# new_model.to(device)
 
-config.WANDB_PROJECT = 'wav2vec_II_classifier_0'
-config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
-os.makedirs(config.MODEL_DIR, exist_ok=True)
+# config.WANDB_PROJECT = 'wav2vec_II_classifier_0'
+# config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
+# os.makedirs(config.MODEL_DIR, exist_ok=True)
 
-id_wandb = wandb.util.generate_id()
-print(f'Wandb id generated: {id_wandb}')
-config.id_wandb = id_wandb
-config_wandb = {'lr': config.lr,
-                'dropout': config.DROPOUT_RATE,
-                'n_batch': config.BATCH_SIZE}
-try:
-    wandb.init(id=id_wandb, config=config_wandb, project=config.WANDB_PROJECT)
-except Exception as e:
-    print(f"Failed to initialize wandb: {e}")
+# id_wandb = wandb.util.generate_id()
+# print(f'Wandb id generated: {id_wandb}')
+# config.id_wandb = id_wandb
+# config_wandb = {'lr': config.lr,
+#                 'dropout': config.DROPOUT_RATE,
+#                 'n_batch': config.BATCH_SIZE}
+# try:
+#     wandb.init(id=id_wandb, config=config_wandb, project=config.WANDB_PROJECT)
+# except Exception as e:
+#     print(f"Failed to initialize wandb: {e}")
 
-new_model, log_data = train(new_model, train_dataloader, val_dataloader, config)
+# new_model, log_data = train(new_model, train_dataloader, val_dataloader, config)
 
-path_new=os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
-os.makedirs(path_new, exist_ok=True)
+# path_new=os.path.join(config.MODEL_BASE_DIR, config.WANDB_PROJECT)
+# os.makedirs(path_new, exist_ok=True)
 
-try:
-    save_model(new_model,path_new )
-except:
-    print('save err')
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-save_log(log_data, f"training_log_{timestamp}.json")
+# try:
+#     save_model(new_model,path_new )
+# except:
+#     print('save err')
+# timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+# save_log(log_data, f"training_log_{timestamp}.json")
 
-gc.collect()
-torch.cuda.empty_cache()
-wandb.finish()
+# gc.collect()
+# torch.cuda.empty_cache()
+# wandb.finish()
