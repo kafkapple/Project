@@ -169,7 +169,8 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
         loss.backward()
         
         if config.GRADIENT_CLIP:
-            print('\nGradient Clipping')
+            if config.VISUALIZE:
+                print('\nGradient Clipping')
             #gradient clipping
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
         optimizer.step()

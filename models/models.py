@@ -232,8 +232,9 @@ def get_model(config, train_loader):
         model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_loader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE,
         activation=config.ACTIVATION, use_wav2vec=True)
     elif config.MODEL =='wav2vec_finetuned':
-        print('Pretrained model loading and finetuning.')
-        config.path_pretrained=''
+        
+        config.path_pretrained= os.path.join(config.MODEL_BASE_DIR, 'wav2vec_I_fine_tune_best')
+        print('Finetuned model loaded from: ',config.path_pretrained )
         model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_loader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE,
         activation=config.ACTIVATION, use_wav2vec=True)
     

@@ -22,7 +22,7 @@ class Config:
     device=''
     
     # monitoring
-    N_STEP_FIG: int = 5
+    N_STEP_FIG: int = 2
     N_EMBEDDINGS: int = 500 # n of embeddings to show
 
     VISUALIZE = False # during training 
@@ -34,10 +34,11 @@ class Config:
     lr: float = 0.0005
     # Model settings
     DATA_NAME= "MELD"#"RAVDESS"#_audio_speech"
-    MODEL: str = "wav2vec_pretrained"#"wav2vec_v2" "classifer" "wav2vec_finetuned"
+    MODEL: str = "wav2vec_finetuned"#"wav2vec_pretrained"#"wav2vec_v2" "classifer" "wav2vec_finetuned"
     model_name: str = ''
     
     path_best="facebook/wav2vec2-base" # model pretrained
+    # os.path.join('wav2vec_I_fine_tune_best')
     path_pretrained=path_best
     
     ACTIVATION: str = "relu"
@@ -168,7 +169,9 @@ class Config:
         
         self.MODEL_BASE_DIR=os.path.join(self.BASE_DIR, 'models')
         self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, f"{self.MODEL}_{self.DATA_NAME}")
-        
+        ####
+        #self.path_pretrained = os.path.join(self.MODEL_BASE_DIR, 'wav2vec_I_fine_tune_best')
+
         self.MODEL_SAVE_PATH = os.path.join(self.MODEL_DIR, f'best_model_{self.MODEL}_{self.DATA_NAME}.pth')
         self.CKPT_SAVE_PATH = os.path.join(self.MODEL_DIR, f'checkpoint_{self.MODEL}_{self.DATA_NAME}.pth')
         self.best_model_info_path = os.path.join(self.MODEL_BASE_DIR, 'best_model_info.txt')
