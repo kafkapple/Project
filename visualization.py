@@ -93,50 +93,53 @@ def compute_layer_similarity(activations):
     n_layers = len(layer_names)
     similarity_matrix = torch.zeros((n_layers, n_layers))
     
+    # 각 레이어의 활성화를 정규화된 벡터로 변환
+    normalized_activations = {}
+    for name, act in activations.items():
+        flat_act = act.view(act.size(0), -1)
+        norm = torch.norm(flat_act, p=2, dim=1, keepdim=True)
+        normalized_activations[name] = flat_act / (norm + 1e-8)  # 0으로 나누는 것을 방지
+    
     for i in range(n_layers):
         for j in range(n_layers):
-            act_i = activations[layer_names[i]]
-            act_j = activations[layer_names[j]]
+            act_i = normalized_activations[layer_names[i]]
+            act_j = normalized_activations[layer_names[j]]
             
-            flat_i = act_i.view(act_i.size(0), -1)
-            flat_j = act_j.view(act_j.size(0), -1)
-            
-            cos_sim = F.cosine_similarity(flat_i.unsqueeze(1), flat_j.unsqueeze(0), dim=2)
-            similarity_matrix[i, j] = cos_sim.mean()
+            # 배치 간 코사인 유사도 계산
+            similarity = torch.mm(act_i, act_j.t())
+            similarity_matrix[i, j] = similarity.mean()
     
-    return similarity_matrix.numpy(), layer_names
-
+    return similarity_matrix.cpu().numpy(), layer_names
 def perform_rsa(model, data_loader, device, num_layers=5):
     model.eval()
     all_activations = None
 
     with torch.no_grad():
         for batch in data_loader:
-            print(batch.keys())
-            print(batch['audio'].shape)
             inputs = batch['audio'].to(device)
-            # 입력 차원 조정
             if inputs.dim() == 4:
                 inputs = inputs.squeeze(2)
             if inputs.dim() == 3:
                 inputs = inputs.squeeze(1)
-
+            
+            print("Input shape:", inputs.shape)
+            
             batch_activations = get_layer_activations(model, inputs, num_layers)
             
             print("Batch activations keys:", list(batch_activations.keys()))
             print("Batch activations shapes:", {k: v.shape for k, v in batch_activations.items()})
             
             if all_activations is None:
-                all_activations = {name: [] for name in batch_activations.keys()}
+                all_activations = batch_activations
+            else:
+                for name in batch_activations:
+                    all_activations[name] = torch.cat([all_activations[name], batch_activations[name]], dim=0)
             
-            for name, act in batch_activations.items():
-                all_activations[name].append(act)
             break  # 첫 번째 배치만 사용 (메모리 효율성을 위해)
 
-    # 모든 배치의 활성화를 결합
-    combined_activations = {name: torch.cat(acts, dim=0) for name, acts in all_activations.items()}
+    print("All activations shapes:", {k: v.shape for k, v in all_activations.items()})
 
-    similarity_matrix, layer_names = compute_layer_similarity(combined_activations)
+    similarity_matrix, layer_names = compute_layer_similarity(all_activations)
 
     plt.figure(figsize=(12, 10))
     sns.heatmap(similarity_matrix, annot=True, cmap='coolwarm', 
