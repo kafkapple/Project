@@ -52,7 +52,10 @@ def compute_layer_similarity(activations):
             similarity_matrix[i, j] = similarity.mean().item()
     
     return similarity_matrix, layer_names
-def get_most_common_layers(model, inputs, num_layers=5, select_all=False):
+
+from collections import Counter
+
+def get_most_common_layers(model, inputs, num_layers=5):
     activations = OrderedDict()
     
     def hook(name):
@@ -77,59 +80,59 @@ def get_most_common_layers(model, inputs, num_layers=5, select_all=False):
     # 레이어 shape 카운트
     shape_counts = Counter(act.shape[1:] for act in activations.values())
     
-    # 가장 흔한 shape 순으로 정렬
-    common_shapes = sorted(shape_counts.items(), key=lambda x: x[1], reverse=True)
+    # 가장 흔한 shape 찾기
+    most_common_shape = shape_counts.most_common(1)[0][0]
     
     matching_layers = OrderedDict()
-    for shape, count in common_shapes:
-        for name, act in reversed(list(activations.items())):
-            if act.shape[1:] == shape:
-                matching_layers[name] = act
-                if not select_all and len(matching_layers) == num_layers:
-                    break
-        if not select_all and len(matching_layers) == num_layers:
-            break
+    for name, act in reversed(list(activations.items())):
+        if act.shape[1:] == most_common_shape:
+            matching_layers[name] = act
+            if len(matching_layers) == num_layers:
+                break
 
-    actual_layers = len(matching_layers)
-    if not select_all and actual_layers < num_layers:
-        print(f"Warning: Only {actual_layers} layers with matching shapes were found.")
-    
-    print(f"Most common shapes: {common_shapes[:actual_layers]}")
-    print(f"Matching layers found ({actual_layers}): {list(matching_layers.keys())}")
-    return matching_layers
+    print(f"Most common shape: {most_common_shape}")
+    print(f"Matching layers found ({len(matching_layers)}): {list(matching_layers.keys())}")
+    return matching_layers, most_common_shape
 
-def perform_rsa(model, data_loader, device, num_layers=5, select_all=False):
+def perform_rsa(model, data_loader, device, num_layers=5):
     model.eval()
     
-    for batch in data_loader:
-        inputs = batch['audio'].to(device)
-        if inputs.dim() == 4:
-            inputs = inputs.squeeze(2)
-        if inputs.dim() == 3:
-            inputs = inputs.squeeze(1)
-        
-        print("Input shape:", inputs.shape)
-        
-        matching_activations = get_most_common_layers(model, inputs, num_layers, select_all)
-        break  # 첫 번째 배치만 사용
+    try:
+        for batch in data_loader:
+            inputs = batch['audio'].to(device)
+            if inputs.dim() == 4:
+                inputs = inputs.squeeze(2)
+            if inputs.dim() == 3:
+                inputs = inputs.squeeze(1)
+            
+            print("Input shape:", inputs.shape)
+            
+            matching_activations, most_common_shape = get_most_common_layers(model, inputs, num_layers)
+            break  # 첫 번째 배치만 사용
 
-    print("Matching activations shapes:", {k: v.shape for k, v in matching_activations.items()})
+        print("Matching activations shapes:", {k: v.shape for k, v in matching_activations.items()})
 
-    if len(matching_activations) < 2:
-        print("Error: Not enough matching layers for RSA. At least 2 layers are required.")
+        if len(matching_activations) < 2:
+            print("Error: Not enough matching layers for RSA. At least 2 layers are required.")
+            return None
+
+        similarity_matrix, layer_names = compute_layer_similarity(matching_activations)
+
+        plt.figure(figsize=(12, 10))
+        sns.heatmap(similarity_matrix, annot=True, cmap='coolwarm', 
+                    xticklabels=layer_names, yticklabels=layer_names)
+        plt.title(f"Layer-wise Representation Similarity Analysis\n({len(layer_names)} layers, shape: {most_common_shape})")
+        plt.xticks(rotation=45, ha='right')
+        plt.yticks(rotation=45)
+        plt.tight_layout()
+
+        return plt.gcf()
+    
+    except Exception as e:
+        print(f"An error occurred during RSA: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None
-
-    similarity_matrix, layer_names = compute_layer_similarity(matching_activations)
-
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(similarity_matrix, annot=True, cmap='coolwarm', 
-                xticklabels=layer_names, yticklabels=layer_names)
-    plt.title(f"Layer-wise Representation Similarity Analysis ({len(layer_names)} layers)")
-    plt.xticks(rotation=45, ha='right')
-    plt.yticks(rotation=45)
-    plt.tight_layout()
-
-    return plt.gcf()
 
 def save_and_log_figure(stage, fig, config, name, title):
     """Save figure to file and log to wandb"""
@@ -212,7 +215,7 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
         print('No embedding.')   
          
     try:
-        fig_rsa = perform_rsa(model, data_loader, config.device, select_all=True)
+        fig_rsa = perform_rsa(model, data_loader, config.device)#, select_all=True)
         save_and_log_figure(stage, fig_rsa, config, "Representation similarity", f"{stage.capitalize()}")
         
     except:
