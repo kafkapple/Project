@@ -150,7 +150,7 @@ def main(args=None):
             print('ERR')
         select_model = int(input('Select Model type.\n1. Classifier only\n2. Pretrained model \n3. Finetuned model\n'))
         if select_model ==1:
-            config.MODEL ="classifer_only"#"wav2vec_v2"  "wav2vec_finetuned"
+            config.MODEL ="classifier_only"#"wav2vec_v2"  "wav2vec_finetuned"
         elif select_model == 2:
             config.MODEL="wav2vec_pretrained"#"wav2vec_v2" "classifer" "wav2vec_finetuned"
         elif select_model == 3:
