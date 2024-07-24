@@ -25,6 +25,11 @@ def compute_layer_similarity(activations, device):
             flattened_i = activations[i].view(activations[i].size(0), -1)
             flattened_j = activations[j].view(activations[j].size(0), -1)
             
+            # 두 텐서의 차원을 맞추기 위해 더 작은 차원을 가진 텐서에 맞춰 조정
+            min_dim = min(flattened_i.size(1), flattened_j.size(1))
+            flattened_i = flattened_i[:, :min_dim]
+            flattened_j = flattened_j[:, :min_dim]
+            
             # 각 샘플 쌍에 대해 cosine similarity 계산
             cos_sim = F.cosine_similarity(flattened_i.unsqueeze(1), flattened_j.unsqueeze(0), dim=2)
             # 모든 샘플 쌍의 평균 similarity
@@ -42,22 +47,19 @@ def get_layer_activations(model, inputs):
     activations = {}
     def hook(name):
         def hook_fn(module, input, output):
-            if isinstance(output, tuple):
-                # 튜플인 경우 첫 번째 요소만 사용
-                activations[name] = output[0].detach() if isinstance(output[0], torch.Tensor) else output[0]
-            elif isinstance(output, torch.Tensor):
+            if isinstance(output, torch.Tensor):
                 activations[name] = output.detach()
+            elif hasattr(output, 'last_hidden_state'):
+                activations[name] = output.last_hidden_state.detach()
             else:
-                # 다른 타입의 출력에 대한 처리
-                activations[name] = output
+                print(f"Warning: Unexpected output type for layer {name}: {type(output)}")
         return hook_fn
     
     handles = []
     for name, module in model.named_modules():
         handles.append(module.register_forward_hook(hook(name)))
     
-    with torch.no_grad():
-        _ = model(inputs)
+    _ = model(inputs)
     
     for handle in handles:
         handle.remove()
@@ -73,12 +75,15 @@ def perform_rsa(model, data_loader, device):
             inputs = batch['audio'].to(device)
             batch_activations = get_layer_activations(model, inputs)
             for name, activation in batch_activations.items():
-                if name not in all_activations:
-                    all_activations[name] = []
-                all_activations[name].append(activation.cpu())
+                if isinstance(activation, torch.Tensor):
+                    if name not in all_activations:
+                        all_activations[name] = []
+                    all_activations[name].append(activation.cpu())
+                else:
+                    print(f"Warning: Skipping non-tensor activation for layer {name}")
 
     # 모든 배치의 활성화를 결합
-    combined_activations = {name: torch.cat(acts, dim=0) for name, acts in all_activations.items()}
+    combined_activations = {name: torch.cat(acts, dim=0) for name, acts in all_activations.items() if acts}
     
     # combined_activations의 형태 확인
     for name, act in combined_activations.items():
