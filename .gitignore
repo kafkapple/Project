@@ -4,7 +4,9 @@
 !models.py
 /data
 /models
+/results
 /wandb
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
