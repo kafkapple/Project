@@ -21,6 +21,7 @@ import torch
 from data_utils import get_logits_from_output
 import torch
 import torch.nn.functional as F
+from models import get_embeddings
 
 def compute_layer_similarity(activations):
     layer_names = list(activations.keys())
@@ -198,6 +199,8 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
             if len(penultimate_features.shape) > 2:
                 penultimate_features = penultimate_features.mean(dim=1)  # 시퀀스 차원에 대해 평균 계산
             all_embeddings.extend(penultimate_features.cpu().numpy())
+            
+            
 
     # Confusion Matrix
     # Convert lists to numpy arrays

@@ -13,6 +13,23 @@ from glob import glob
 from transformers import Wav2Vec2Model
 from train_utils import evaluate_model
 
+def get_embeddings(model, data_loader):
+    model.eval()
+    embeddings = []
+    labels = []
+    
+    with torch.no_grad():
+        for batch in data_loader:
+            inputs, batch_labels = batch
+            _ = model(inputs)  # forward pass
+            batch_embeddings = model.get_penultimate_features()
+            
+            embeddings.append(batch_embeddings)
+            labels.extend(batch_labels)
+    
+    return torch.cat(embeddings), labels
+
+
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -184,34 +201,6 @@ def prep_model(config, train_loader, is_sweep=False):
         
         wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS)
         
-    # if os.path.exists(config.CKPT_SAVE_PATH) and config.IS_RESUME:
-    #     model, optimizer, global_epoch, best_val_accuracy, id_wandb= load_checkpoint(config, model, optimizer, device)
-    #     if not is_sweep: # load model
-    #         #id_wandb = wandb.util.generate_id()
-    #         print(f"Resuming training from epoch {global_epoch}. Best val accuracy: {best_val_accuracy:.3f}\nWandb id loaded: {config.id_wandb}\nWandb project: {config.WANDB_PROJECT}")
-    #         if config.CUR_MODE == 'benchmark':
-    #             #config.WANDB_PROJECT+= "_"+config.CUR_MODE
-    #             print(f'But this is for benchmark. New wandb id is generated: {id_wandb}\nWandb project: {config.WANDB_PROJECT}')
-              
-    #         config.id_wandb=id_wandb
-    #         wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, resum=True, settings=wandb.Settings(start_method="thread"))
-    #     else: 
-    #         print('\n####### Sweep starts. ')
-    #         global_epoch = 1
-    #         #id_wandb = wandb.util.generate_id()
-    #         #config.WANDB_PROJECT+="_"+config.CUR_MODE
-    #         id_wandb=config.id_wandb
-    #         wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS, resume=False, settings=wandb.Settings(start_method="thread"))
-    #         model = get_model(config, train_loader)
-    # else:
-    #     print('No trained data was given. New training begins.')
-    #     global_epoch = 1
-    #     id_wandb = wandb.util.generate_id()
-    #     print(f'Wandb id generated: {id_wandb}')
-    #     config.id_wandb = id_wandb
-        
-    #     wandb.init(id=id_wandb, project=config.WANDB_PROJECT, config=config.CONFIG_DEFAULTS)#, resume=True)
-    #     model = get_model(config, train_loader)
     config.global_epoch = global_epoch
 
     model = model.to(device)
@@ -236,19 +225,28 @@ def print_model_info(model):
     print(f"\nTotal layers: {len(list(model.modules()))}")
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
+    
 def unfreeze_layers(model, num_layers):
+    # 먼저 모든 파라미터를 고정
     for param in model.parameters():
         param.requires_grad = False
-    try:
-        for i, layer in enumerate(reversed(list(model.wav2vec2.encoder.layers))):
-            if i < num_layers:
-                for param in layer.parameters():
-                    param.requires_grad = True
-            else:
-                break
-    except:
-        print('unfreeze err')
-        
+    
+    # 모델의 모든 모듈을 리스트로 변환
+    all_modules = list(model.modules())
+    
+    # 마지막 num_layers 개의 모듈에 대해 파라미터 학습 가능하게 설정
+    for module in all_modules[-num_layers:]:
+        for param in module.parameters():
+            param.requires_grad = True
+    
+    # 학습 가능한 파라미터 수 확인
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Trainable parameters: {trainable_params}")
+
+def freeze_wav2vec(model):
+    for param in model.wav2vec.parameters():
+        param.requires_grad = False
+
 def get_model(config, train_loader):
     
     if config.MODEL == 'classifier_only':
@@ -257,17 +255,15 @@ def get_model(config, train_loader):
         activation=config.ACTIVATION, use_wav2vec=False)
         
     elif config.MODEL =='wav2vec_pretrained':
-        print('Pretrained model loaded.')
+        print('Pretrained model loaded. Feature extraction only, and wav2vec model is frozen.')
         
         model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_loader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE,
         activation=config.ACTIVATION, use_wav2vec=True)
         
-        for param in model.parameters():
-            param.requires_grad = False
-        
-        unfreeze_layers(model, config.n_unfreeze)
-        
+        freeze_wav2vec(model)
+
         print_model_info(model)
+        optimizer = torch.optim.Adam(model.emotion_classifier.parameters(), lr=1e-3)
         
     elif config.MODEL =='wav2vec_finetuned':
         

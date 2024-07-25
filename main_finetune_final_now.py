@@ -19,7 +19,7 @@ from visualization import visualize_results
 from train_utils import log_metrics, evaluate_model
 import torch
 
-from models import get_model, EmotionRecognitionModel_v2, EmotionRecognitionWithWav2Vec 
+from models import get_model, print_model_info, unfreeze_layers, EmotionRecognitionModel_v2, EmotionRecognitionWithWav2Vec 
 
 gc.collect()
 torch.cuda.empty_cache()
@@ -44,16 +44,6 @@ def print_model_info(model):
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
     
-def unfreeze_layers(model, num_layers):
-    for param in model.parameters():
-        param.requires_grad = False
-    
-    for i, layer in enumerate(reversed(list(model.wav2vec2.encoder.layers))):
-        if i < num_layers:
-            for param in layer.parameters():
-                param.requires_grad = True
-        else:
-            break
 def save_model(model, path):
     if hasattr(model, 'save_pretrained'):
         model.save_pretrained(path)
