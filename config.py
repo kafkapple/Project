@@ -50,8 +50,8 @@ class Config:
     label_smoothing=0.1
     #momentum = 0.01
     
-    BOOL = False
-    BOOL_MODEL_INIT=False
+    BOOL = True
+    BOOL_MODEL_INIT=True
     SCHEDULER: bool = BOOL
     GRADIENT_CLIP: bool = BOOL
     eta_min: float = 1e-4 /100
