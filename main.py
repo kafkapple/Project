@@ -12,16 +12,30 @@ from evaluation import compare_models
 from visualization import visualize_results
 from hyperparameter_search import run_hyperparameter_sweep
 import pandas as pd
-def generate_unique_filename(filename):
-    name, ext = os.path.splitext(filename)
-    counter = 1
-    new_filename = filename
+
+
+
+# def generate_unique_filename(filename):
+#     name, ext = os.path.splitext(filename)
+#     counter = 1
+#     new_filename = filename
     
-    while os.path.exists(new_filename):
-        new_filename = f"{name}_v{counter}{ext}"
-        counter += 1
+#     while os.path.exists(new_filename):
+#         new_filename = f"{name}_v{counter}{ext}"
+#         counter += 1
     
-    return new_filename
+#     return new_filename
+# def get_next_version(model_path):
+#     dir_name, file_name = os.path.split(model_path)
+#     match = re.search(r'_v(\d+)', file_name)
+#     if match:
+#         current_version = int(match.group(1))
+#         new_version = current_version + 1
+#         new_file_name = re.sub(r'_v\d+', f'_v{new_version}', file_name)
+#     else:
+#         new_file_name = file_name.replace('.pth', '_v2.pth')
+#     return os.path.join(dir_name, new_file_name)
+
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
@@ -31,19 +45,6 @@ def init_weights(m):
     elif isinstance(m, nn.BatchNorm1d):
         nn.init.constant_(m.weight, 1)
         nn.init.constant_(m.bias, 0)
-
-
-def get_next_version(model_path):
-    dir_name, file_name = os.path.split(model_path)
-    match = re.search(r'_v(\d+)', file_name)
-    if match:
-        current_version = int(match.group(1))
-        new_version = current_version + 1
-        new_file_name = re.sub(r'_v\d+', f'_v{new_version}', file_name)
-    else:
-        new_file_name = file_name.replace('.pth', '_v2.pth')
-    return os.path.join(dir_name, new_file_name)
-
 
 
 def print_menu():
@@ -176,13 +177,7 @@ def main(args=None):
         train_loader, val_loader, test_loader = prepare_dataloaders(data, labels, config)
         
         
-        if os.path.exists(config.MODEL_SAVE_PATH):
-            config.MODEL_SAVE_PATH=generate_unique_filename(config.MODEL_SAVE_PATH)
-            config.CKPT_SAVE_PATH=generate_unique_filename(config.CKPT_SAVE_PATH)
-            print(f'New model will be trained: {config.MODEL_SAVE_PATH}')
-            # file_name, _ = os.path.splitext(os.path.basename(config.MODEL_SAVE_PATH))
-            
-            # file_name = file_name.replace('best_model_', '')
+        
 
         config.NUM_EPOCHS = int(input("Number of epoch for training: "))
         

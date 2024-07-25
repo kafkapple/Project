@@ -3,7 +3,7 @@ import os
 import sys
 import datetime
 from collections import namedtuple
-
+import re
 
 # dropout
 # bath norm
@@ -13,6 +13,46 @@ from collections import namedtuple
 
 # scheduler at train_utils CosineAnnealingLR
 # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
+
+
+def generate_unique_path(base_path, is_file=False, version_prefix='_v'):
+    """
+    Generates a unique path by appending a version number if the path already exists.
+
+    Args:
+    base_path (str): The base path of the file or folder.
+    is_file (bool): Whether the path is for a file. If False, it is considered a folder.
+    version_prefix (str): The prefix to use for versioning. Default is '_v'.
+
+    Returns:
+    str: The unique path.
+    """
+    # If the path does not exist, return the base path
+    if not os.path.exists(base_path):
+        return base_path
+
+    # Extract the name and extension for files
+    if is_file:
+        name, ext = os.path.splitext(base_path)
+        counter = 1
+        new_path = base_path
+        
+        # Generate a unique file name
+        while os.path.exists(new_path):
+            new_path = f"{name}{version_prefix}{counter}{ext}"
+            counter += 1
+        return new_path
+    else:
+        counter = 1
+        new_path = base_path
+        
+        # Generate a unique folder name
+        while os.path.exists(new_path):
+            new_path = f"{base_path}{version_prefix}{counter}"
+            counter += 1
+        return new_path
+
 @dataclass
 
 #
@@ -178,13 +218,25 @@ class Config:
         self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, self.WANDB_PROJECT )
         self.MODEL_RESULTS = os.path.join(self.MODEL_DIR, 'results')
         self.MODEL_PRE_BASE_DIR = os.path.join(self.MODEL_DIR, 'finetuned')
-
-        ####
-        #self.path_pretrained = os.path.join(self.MODEL_BASE_DIR, 'wav2vec_I_fine_tune_best')
-
+        
         self.MODEL_SAVE_PATH = os.path.join(self.MODEL_DIR, f'best_model_{self.WANDB_PROJECT}.pth')
         self.CKPT_SAVE_PATH = os.path.join(self.MODEL_DIR, f'checkpoint_{self.WANDB_PROJECT}.pth')
         self.best_model_info_path = os.path.join(self.MODEL_BASE_DIR, 'best_model_info.txt')
+        
+        if os.path.exists(self.MODEL_SAVE_PATH):
+            self.MODEL_SAVE_PATH = generate_unique_path(self.MODEL_SAVE_PATH, is_file=True)#generate_unique_filename(self.MODEL_SAVE_PATH)
+            self.CKPT_SAVE_PATH = generate_unique_path(self.CKPT_SAVE_PATH, is_file=True)#generate_unique_filename(self.CKPT_SAVE_PATH)
+            print(f'New model will be saved: {self.MODEL_SAVE_PATH}')
+            # file_name, _ = os.path.splitext(os.path.basename(self.MODEL_SAVE_PATH))
+            
+            # file_name = file_name.replace('best_model_', '')
+        if os.path.exists(self.MODEL_DIR):
+            self.MODEL_DIR = generate_unique_path(self.MODEL_DIR, is_file=False)
+            print(f'New model stuffs will be saved: {self.MODEL_DIR}\n')
+        ####
+        #self.path_pretrained = os.path.join(self.MODEL_BASE_DIR, 'wav2vec_I_fine_tune_best')
+
+        
 
         print(f'\n\n##### Current Project Location #####\n-Base Directory: {self.BASE_DIR}\n-Data: {self.DATA_DIR}\n-Models: {self.MODEL_BASE_DIR}-Current Model: {self.MODEL_DIR}\n-Current Model name: {self.MODEL_SAVE_PATH}\n\nFigure will be saved per {self.N_STEP_FIG}-step\n')
         os.makedirs(self.MODEL_DIR, exist_ok=True)
