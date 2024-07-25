@@ -22,7 +22,7 @@ class Config:
     device=''
     
     # monitoring
-    N_STEP_FIG: int = 2
+    N_STEP_FIG: int = 5
     N_EMBEDDINGS: int = 500 # n of embeddings to show
 
     VISUALIZE = False # during training 
@@ -173,25 +173,23 @@ class Config:
         self.update_path()
         
     def update_path(self):
-        
-        self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, f"{self.MODEL}_{self.DATA_NAME}")
+        self.WANDB_PROJECT=f"{self.MODEL}_{self.DATA_NAME}"
+        #self.WANDB_PROJECT = f"{self.PROJECT_DIR}_{self.MODEL}"#_{date_str}"
+        self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, self.WANDB_PROJECT )
         self.MODEL_RESULTS = os.path.join(self.MODEL_DIR, 'results')
-        self.MODEL_PRE_BASE_DIR = os.path.join(self.MODEL_BASE_DIR, 'finetuned')
-        os.makedirs(self.MODEL_PRE_BASE_DIR, exist_ok=True)
+        self.MODEL_PRE_BASE_DIR = os.path.join(self.MODEL_DIR, 'finetuned')
+
         ####
         #self.path_pretrained = os.path.join(self.MODEL_BASE_DIR, 'wav2vec_I_fine_tune_best')
 
-        self.MODEL_SAVE_PATH = os.path.join(self.MODEL_DIR, f'best_model_{self.MODEL}_{self.DATA_NAME}.pth')
-        self.CKPT_SAVE_PATH = os.path.join(self.MODEL_DIR, f'checkpoint_{self.MODEL}_{self.DATA_NAME}.pth')
+        self.MODEL_SAVE_PATH = os.path.join(self.MODEL_DIR, f'best_model_{self.WANDB_PROJECT}.pth')
+        self.CKPT_SAVE_PATH = os.path.join(self.MODEL_DIR, f'checkpoint_{self.WANDB_PROJECT}.pth')
         self.best_model_info_path = os.path.join(self.MODEL_BASE_DIR, 'best_model_info.txt')
-        self.WANDB_PROJECT = f"{self.PROJECT_DIR}_{self.MODEL}"#_{date_str}"
 
         print(f'\n\n##### Current Project Location #####\n-Base Directory: {self.BASE_DIR}\n-Data: {self.DATA_DIR}\n-Models: {self.MODEL_BASE_DIR}-Current Model: {self.MODEL_DIR}\n-Current Model name: {self.MODEL_SAVE_PATH}\n\nFigure will be saved per {self.N_STEP_FIG}-step\n')
-        
         os.makedirs(self.MODEL_DIR, exist_ok=True)
-        os.makedirs(self.MODEL_PRE_BASE_DIR, exist_ok=True)
         os.makedirs(self.MODEL_RESULTS, exist_ok=True)
-        
+        os.makedirs(self.MODEL_PRE_BASE_DIR, exist_ok=True)
         
     # def __setattr__(self, name:str, value: any) -> None:
     #     if hasattr(self, name):

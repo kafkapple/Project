@@ -112,10 +112,6 @@ def train(model, train_dataloader, val_dataloader, config):
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters)
     criterion = nn.CrossEntropyLoss(label_smoothing=config.label_smoothing)
     
-    path_best = f"{os.path.join(config.MODEL_BASE_DIR,'finetuned', config.WANDB_PROJECT)+'_best'}"
-    os.makedirs(path_best, exist_ok=True)
-    config.path_best = path_best
-    
     for epoch in tqdm(range(config.NUM_EPOCHS)):
         config.global_epoch+=1
         if config.global_epoch == 5:
@@ -214,7 +210,7 @@ config.N_STEP_FIG=1
 num_epochs = 60
 config.NUM_EPOCHS=num_epochs
 #lr=1e-4
-n_batch = 32 # 74% GPU. 8 is danger high n_batch -> small batch size -> low gpu?
+n_batch = 8 # 74% GPU. 8 is danger high n_batch -> small batch size -> low gpu?
 config.BATCH_SIZE=n_batch
 n_labels = len(config.LABELS_EMO_MELD)
 
@@ -251,10 +247,20 @@ config.device = device
 
 ###### I.
 # Fine-tuning 및 성능 기록
-config.model_name= 'wav2vec_finetuned_v0'
+
 #model = Wav2VecFeatureExtractor()
 
 # model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_dataloader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE, activation=config.ACTIVATION, use_wav2vec=True)
+
+# wandb log
+config.MODEL= 'wav2vec_finetuned'
+config.DATA_NAME='MELD'
+config.WANDB_PROJECT=config.MODEL+'_'+config.DATA_NAME
+
+path_best = f"{os.path.join(config.MODEL_PRE_BASE_DIR, config.WANDB_PROJECT)+'_best'}"
+os.makedirs(path_best, exist_ok=True)
+print(path_best)
+config.update_path()
 
 model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels, output_hidden_states=True)
 model.to(device)
@@ -263,15 +269,12 @@ for param in model.parameters():
 n_unfreeze=3
 unfreeze_layers(model, n_unfreeze)
 config.lr =1e-4
-print_model_info(model)
 
-# wandb log
-config.WANDB_PROJECT='wav2vec_finetuned'
-config.MODEL_DIR = os.path.join(config.MODEL_BASE_DIR, 'finetuned',config.WANDB_PROJECT)
-os.makedirs(config.MODEL_DIR, exist_ok=True)
+print(config.MODEL_DIR)
 
 config_wandb = {'lr': config.lr,
-                'n_batch': n_batch
+                'n_batch': n_batch, 
+                'model_path': config.MODEL_DIR
                 }
 id_wandb = wandb.util.generate_id()
 print(f'Wandb id generated: {id_wandb}')
@@ -290,7 +293,7 @@ except:
 
 # 학습 로그 저장
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-save_log(log_data, f"training_log_{timestamp}.json")
+save_log(log_data, os.path.join(config.MODEL_PRE_BASE_DIR, f"training_log_{timestamp}.json"))
 
 gc.collect()
 torch.cuda.empty_cache()

@@ -163,6 +163,7 @@ def save_and_log_figure(stage, fig, config, name, title):
     """Save figure to file and log to wandb"""
     fig_path = os.path.join(config.MODEL_RESULTS, f"{name}_{config.global_epoch}.png")
     fig.savefig(fig_path)
+    print('Figure saved at: ', fig_path)
     wandb.log({stage:{f"{name}": wandb.Image(fig_path, caption=title)}}, step=config.global_epoch)
     plt.close(fig)
     
