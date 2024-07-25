@@ -171,9 +171,8 @@ def train(model, train_dataloader, val_dataloader, config):
             print('New best model found.')
             best_val_f1 = train_metrics[4]
             try:
-                
-                print(config.self.MODEL_PRE_BASE_DIR)
-                save_model(model, config.self.MODEL_PRE_BASE_DIR)
+                print(config.MODEL_PRE_BASE_DIR)
+                save_model(model, config.MODEL_PRE_BASE_DIR)
                 print('Model is saved.')
                 #model.save_pretrained(config.path_best)
             except:
