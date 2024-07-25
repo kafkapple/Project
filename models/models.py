@@ -142,9 +142,9 @@ def prep_model(config, train_loader, is_sweep=False):
     model = get_model(config, train_loader)
     
     if config.OPTIMIZER == "adam":
-        optimizer = torch.optim.Adam(model.parameters(), weight_decay=config.weight_decay, lr=float(config.lr))
+        optimizer = torch.optim.Adam(model.parameters(),  lr=float(config.lr)) #weight_decay=config.weight_decay,
         if config.MODEL == 'wav2vec_pretrained' or config.MODEL == 'wav2vec_finetuned':
-            optimizer = torch.optim.Adam(model.emotion_classifier.parameters(), lr=config.lr)
+            optimizer = torch.optim.Adam(model.emotion_classifier.parameters(), weight_decay=config.weight_decay, lr=config.lr)
     elif config.OPTIMIZER == "SGD":
         optimizer = torch.optim.SGD(model.parameters(), lr=float(config.lr), momentum=0.9)
     else:

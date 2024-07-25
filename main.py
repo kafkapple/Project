@@ -109,7 +109,7 @@ def main(args=None):
             config.TARGET=input("train or test dataset?\n")
     
             print(f'Dataset: {config.DATA_NAME} / {config.TARGET} will be prepared.\nSamples: {config.N_SAMPLE}')
-   
+        
         data_dir= load_data(config) 
 
         if SELECT_DATA =='2':
@@ -147,11 +147,9 @@ def main(args=None):
             config.MODEL = "wav2vec_finetuning"
         else:
             print('ERR')
-            
+        
         config.update_path()
-         #data_dir = load_data(config) 
-        data_dir = os.path.join(config.DATA_DIR, config.DATA_NAME)
-        print('Data Dir: ', data_dir)
+        data_dir = config.DATA_FULL_DIR
         #extracted_path = os.path.join(config.DATA_DIR, f"{config.DATA_NAME}.Raw")
         if config.DATA_NAME=="MELD":
             data_dir=os.path.join(data_dir, 'train_audio')
@@ -176,9 +174,6 @@ def main(args=None):
         
         train_loader, val_loader, test_loader = prepare_dataloaders(data, labels, config)
         
-        
-        
-
         config.NUM_EPOCHS = int(input("Number of epoch for training: "))
         
         model, optimizer, criterion, device = prep_model(config, train_loader, is_sweep=False)
@@ -192,7 +187,7 @@ def main(args=None):
         
         visualize_results(config, model, test_loader, device, history, 'test')
         
-        print(f"Best val loss: {best_val_loss:.4f}")
+        print(f"Best val loss / acc: {best_val_loss:.4f}/ {best_val_acc:.4f}")
     elif args.mode == 'resume':
         select_data = int(input('Select dataset for training.\n1. RAVDESS\n2. MELD\n'))
         if select_data ==1:
@@ -201,11 +196,7 @@ def main(args=None):
             config.DATA_NAME='MELD'
         else:
             print('ERR')
-        
-         #data_dir = load_data(config) 
-        
-         #data_dir = load_data(config) 
-        data_dir = os.path.join(config.DATA_DIR, config.DATA_NAME)
+
         #extracted_path = os.path.join(config.DATA_DIR, f"{config.DATA_NAME}.Raw")
         if config.DATA_NAME=="MELD":
             text_train_df= pd.read_csv(os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv'))

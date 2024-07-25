@@ -85,12 +85,12 @@ class Config:
     # For regul
     DROPOUT_RATE: float = 0.4
     early_stop_epoch: int = 100
-    weight_decay: float = 0.1 # 1e-5 #0.01
+    #weight_decay: float = 0.1 # 1e-5 #0.01
     label_smoothing=0.1
     #momentum = 0.01
     
     BOOL_REGUL = False
-    BOOL_MODEL_INIT=True
+    BOOL_MODEL_INIT=False
     
     SCHEDULER: bool = BOOL_REGUL
     GRADIENT_CLIP: bool = BOOL_REGUL
@@ -213,6 +213,7 @@ class Config:
         self.update_path()
         
     def update_path(self):
+        self.DATA_FULL_DIR = os.path.join(self.DATA_DIR, self.DATA_NAME)
         self.WANDB_PROJECT=f"{self.MODEL}_{self.DATA_NAME}"
         #self.WANDB_PROJECT = f"{self.PROJECT_DIR}_{self.MODEL}"#_{date_str}"
         self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, self.WANDB_PROJECT )
@@ -236,12 +237,12 @@ class Config:
         ####
         #self.path_pretrained = os.path.join(self.MODEL_BASE_DIR, 'wav2vec_I_fine_tune_best')
 
-        
 
-        print(f'\n\n##### Current Project Location #####\n-Base Directory: {self.BASE_DIR}\n-Data: {self.DATA_DIR}\n-Models: {self.MODEL_BASE_DIR}-Current Model: {self.MODEL_DIR}\n-Current Model name: {self.MODEL_SAVE_PATH}\n\nFigure will be saved per {self.N_STEP_FIG}-step\n')
+        print(f'\n\n##### Current Project Location #####\n-Base Directory: {self.BASE_DIR}\n-Data: {self.DATA_FULL_DIR}\n-Current Model: {self.MODEL_DIR}\n-Current Model name: {self.MODEL_SAVE_PATH}\n\nFigure will be saved per {self.N_STEP_FIG}-step\n')
         os.makedirs(self.MODEL_DIR, exist_ok=True)
         os.makedirs(self.MODEL_RESULTS, exist_ok=True)
         os.makedirs(self.MODEL_PRE_BASE_DIR, exist_ok=True)
+        os.makedirs(self.DATA_FULL_DIR, exist_ok=True)
         
     # def __setattr__(self, name:str, value: any) -> None:
     #     if hasattr(self, name):
