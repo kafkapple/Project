@@ -63,7 +63,7 @@ class Config:
     
     # monitoring
     N_STEP_FIG: int = 2
-    N_EMBEDDINGS: int = 500 # n of embeddings to show
+    N_EMBEDDINGS: int = 2000 # n of embeddings to show
 
     VISUALIZE = False # during training 
     
@@ -217,7 +217,13 @@ class Config:
         self.DATA_FULL_DIR = os.path.join(self.DATA_DIR, self.DATA_NAME)
         self.WANDB_PROJECT=f"{self.MODEL}_{self.DATA_NAME}"
         #self.WANDB_PROJECT = f"{self.PROJECT_DIR}_{self.MODEL}"#_{date_str}"
-        self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, self.WANDB_PROJECT )
+        self.MODEL_DIR = os.path.join(self.MODEL_BASE_DIR, self.WANDB_PROJECT, self.WANDB_PROJECT)
+        
+            # file_name = file_name.replace('best_model_', '')
+        if os.path.exists(self.MODEL_DIR):
+            self.MODEL_DIR = generate_unique_path(self.MODEL_DIR, is_file=False)
+            print(f'New model stuffs will be saved: {self.MODEL_DIR}\n')
+            
         self.MODEL_RESULTS = os.path.join(self.MODEL_DIR, 'results')
         self.MODEL_PRE_BASE_DIR = os.path.join(self.MODEL_DIR, 'finetuned')
         
@@ -230,11 +236,6 @@ class Config:
             self.CKPT_SAVE_PATH = generate_unique_path(self.CKPT_SAVE_PATH, is_file=True)#generate_unique_filename(self.CKPT_SAVE_PATH)
             print(f'New model will be saved: {self.MODEL_SAVE_PATH}')
             # file_name, _ = os.path.splitext(os.path.basename(self.MODEL_SAVE_PATH))
-            
-            # file_name = file_name.replace('best_model_', '')
-        if os.path.exists(self.MODEL_DIR):
-            self.MODEL_DIR = generate_unique_path(self.MODEL_DIR, is_file=False)
-            print(f'New model stuffs will be saved: {self.MODEL_DIR}\n')
         ####
         #self.path_pretrained = os.path.join(self.MODEL_BASE_DIR, 'wav2vec_I_fine_tune_best')
 
