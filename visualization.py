@@ -78,19 +78,29 @@ def get_most_common_layers(model, inputs, num_layers=5, select_all_common=False)
         h.remove()
 
     # 레이어 flattened shape 카운트
-    shape_counts = Counter(get_flattened_shape(act.shape) for act in activations.items())
+    
+    try:
+        shape_counts = Counter(get_flattened_shape(act.shape) for act in activations.items())
+    except:
+        shape_counts = Counter(get_flattened_shape(act.shape) for act in activations.values())
     
     # 가장 흔한 flattened shape 찾기
     most_common_shape = shape_counts.most_common(1)[0][0]
     most_common_count = shape_counts[most_common_shape]
     
     matching_layers = OrderedDict()
-    for name, act in reversed(list(activations.items())):
-        if get_flattened_shape(act.shape) == most_common_shape:
-            matching_layers[name] = act
-            if not select_all_common and len(matching_layers) == num_layers:
-                break
-
+    try:
+        for name, act in reversed(list(activations.items())):
+            if get_flattened_shape(act.shape) == most_common_shape:
+                matching_layers[name] = act
+                if not select_all_common and len(matching_layers) == num_layers:
+                    break
+    except:
+        for name, act in reversed(list(activations.values())):
+            if get_flattened_shape(act.shape) == most_common_shape:
+                matching_layers[name] = act
+                if not select_all_common and len(matching_layers) == num_layers:
+                    break
     print(f"Most common flattened shape: {most_common_shape}")
     print(f"Matching layers found ({len(matching_layers)}): {list(matching_layers.keys())}")
     return matching_layers, most_common_shape
