@@ -87,7 +87,7 @@ class Config:
     early_stop_epoch: int = 100
     #weight_decay: float = 0.1 # 1e-5 #0.01
     label_smoothing=0.1
-    #momentum = 0.01
+    momentum = 0.1
     
     BOOL_REGUL = False
     BOOL_MODEL_INIT=False

@@ -354,10 +354,11 @@ class EmotionRecognitionWithWav2Vec(nn.Module):
     def get_penultimate_features(self):
         return self.penultimate_features
 
+
 class EmotionRecognitionModel_v2(EmotionRecognitionBase):
     def __init__(self, input_size, num_classes, dropout_rate, activation):
         super().__init__(input_size, num_classes, dropout_rate, activation)
-        momentum = 0.01
+        momentum = 0.1#config.momentum
         self.fc1 = nn.Linear(input_size, 256)
         self.bn1 = nn.BatchNorm1d(256, momentum=momentum)
         self.fc2 = nn.Linear(256, 128)
