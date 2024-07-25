@@ -96,13 +96,18 @@ def prep_audio(config, text_train_df, destination_base_path, TARGET):  # by Lek 
 def extract_features_and_labels(dataloader):
     all_features = []
     all_labels = []
-    for features, labels in tqdm(dataloader, desc="Extracting features"):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #for features, labels in tqdm(dataloader, desc="Extracting features"):
+    for batch in tqdm(dataloader, desc="Extracting features"):
+        features = batch['audio'].to(device)
       # 만약 features가 3D (batch, sequence_length, feature_dim)라면 2D로 변환
-      if features.dim() == 3:
-          features = features.view(features.size(0), -1)
-      all_features.append(features.cpu().numpy())
-      all_labels.append(labels.cpu().numpy())
-      return np.vstack(all_features), np.concatenate(all_labels)
+        labels = batch['label'].to(device)
+
+        if features.dim() == 3:
+            features = features.view(features.size(0), -1)
+        all_features.append(features.cpu().numpy())
+        all_labels.append(labels.cpu().numpy())
+        return np.vstack(all_features), np.concatenate(all_labels)
 
 def prep_data_for_benchmark(data_loader):
     X, y= extract_features_and_labels(data_loader)

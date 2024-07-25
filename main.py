@@ -174,10 +174,21 @@ def main(args=None):
         
         config.NUM_EPOCHS = int(input("Number of epoch for training: "))
         
-        model, optimizer, criterion, device = prep_model(config, train_loader, is_sweep=False)
         
         #### !! epoch +1 but not wanted?! -> model prep problem
         print('Model initialization...')
+        model, optimizer, criterion, device = prep_model(config, train_loader, is_sweep=False)
+        input_names = ['Audio Speech Data']
+        output_names = ['Emotion Classes']
+        for batch in test_loader:
+            features = batch['audio'].to(device)
+            batch_labels = batch['label'].to(device)
+        path_model=os.path.join(config.MODEL_BASE_DIR, f"model_{config.MODEL}.onnx")
+        print(path_model)
+        torch.onnx.export(model, features, path_model, input_names=input_names, output_names=output_names)
+        
+        print('################')
+        
         if config.MODEL_INIT:
             model.apply(init_weights)   
         history, best_val_loss, best_val_acc = train_model(model, train_loader, val_loader, config, device, optimizer, criterion)
@@ -266,9 +277,15 @@ def main(args=None):
         visualize_results(config, model, test_loader, device, None, 'test')
     
     elif args.mode == 'benchmark':
+        data_dir = config.DATA_FULL_DIR
+        if config.DATA_NAME=='RAVDESS':
+            data, labels = preprocess_data(data_dir)
+            print('RAVDESS')
         config.SWEEP_NAIVE=True
+        
+        train_loader, val_loader, test_loader = prepare_dataloaders(data, labels, config)
 
-        model, _, criterion, device = prep_model(config, test_loader, is_sweep=False)
+        model, _, criterion, device = prep_model(config, train_loader, is_sweep=False)
         compare_models(model, train_loader, val_loader, test_loader, config, device)
     
     elif args.mode == 'find_best':

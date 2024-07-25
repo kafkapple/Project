@@ -74,8 +74,8 @@ class Config:
     lr: float = 0.0005 #1e-4 ~ 1e-3
     weight_decay: float = 0.0005 #0.1 # 1e-5 ~ 1e-4
     # Model settings
-    DATA_NAME= "MELD"#"RAVDESS"#_audio_speech"
-    MODEL: str = "wav2vec_pretrained"#"wav2vec_v2" "classifer" "wav2vec_finetuned"
+    DATA_NAME= "RAVDESS"#_audio_speech"
+    MODEL: str = "classifier_only"#"wav2vec_pretrained"#"wav2vec_v2" "classifer" "wav2vec_finetuned"
     model_name: str = ''
     
     # os.path.join('wav2vec_I_fine_tune_best')
@@ -159,11 +159,12 @@ class Config:
     N_SWEEP: int = 50
     
     model_benchmark='svm'
-    C_val: float = 0.1
+    C_val: float = 1#0.1
     max_iter: int = 1000 # for multi logistic reg
     solver: str = 'saga'
-    penalty: str = 'l1'
+    penalty: str = 'l2'#'elasticnet'
     kernel: str = 'rbf'
+    gamma: int = 0.001
     
     sweep_config = {
         'method': 'bayes',
@@ -171,9 +172,10 @@ class Config:
         'parameters': {
             'lr': {'min': 0.0001, 'max': 0.01},
             'batch_size': {'values': [16, 32, 64, 128]},
-           # 'num_epochs': {'min': 5, 'max': 50},
             'dropout_rate': {'min': 0.1, 'max': 0.6},
-            "activation":{"values":['relu', 'leaky_relu', 'gelu']}
+            "activation":{"values":['relu', 'leaky_relu', 'gelu']},
+            #'optimizer': {'values': ['adam', 'SGD']},
+           # 'num_epochs': {'min': 5, 'max': 50},
         }
     }
     
