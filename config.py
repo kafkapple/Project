@@ -62,7 +62,7 @@ class Config:
     device=''
     
     # monitoring
-    N_STEP_FIG: int = 5
+    N_STEP_FIG: int = 2
     N_EMBEDDINGS: int = 500 # n of embeddings to show
 
     VISUALIZE = False # during training 
@@ -85,7 +85,7 @@ class Config:
     # For regul
     DROPOUT_RATE: float = 0.4
     early_stop_epoch: int = 100
-    #weight_decay: float = 0.1 # 1e-5 #0.01
+    weight_decay: float = 0.1 # 1e-5 #0.01
     label_smoothing=0.1
     momentum = 0.1
     

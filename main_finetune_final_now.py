@@ -108,8 +108,8 @@ def train(model, train_dataloader, val_dataloader, config):
         'val': {'loss': [], 'accuracy': [], 'precision': [], 'recall': [], 'f1': []}
     }
     optimizer_grouped_parameters = [
-    {'params': model.wav2vec2.parameters(), 'lr': 1e-5, 'weight_decay':config.weight_decay},
-    {'params': model.classifier.parameters(), 'lr': 1e-3, 'weight_decay':config.weight_decay}
+    {'params': model.wav2vec2.parameters(), 'lr': config.lr/10,  'weight_decay':config.weight_decay/10},
+    {'params': model.classifier.parameters(), 'lr': config.lr, 'weight_decay':config.weight_decay}
     ]
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters)
     criterion = nn.CrossEntropyLoss(label_smoothing=config.label_smoothing)
