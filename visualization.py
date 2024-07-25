@@ -21,8 +21,23 @@ import torch
 from data_utils import get_logits_from_output
 import torch
 import torch.nn.functional as F
-from models import get_embeddings
 
+
+def get_embeddings(model, data_loader):
+    model.eval()
+    embeddings = []
+    labels = []
+    
+    with torch.no_grad():
+        for batch in data_loader:
+            inputs, batch_labels = batch
+            _ = model(inputs)  # forward pass
+            batch_embeddings = model.get_penultimate_features()
+            
+            embeddings.append(batch_embeddings)
+            labels.extend(batch_labels)
+    
+    return torch.cat(embeddings), labels
 def compute_layer_similarity(activations):
     layer_names = list(activations.keys())
     n_layers = len(layer_names)

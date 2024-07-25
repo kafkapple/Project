@@ -191,7 +191,5 @@ def main():
     # n_unfreeze=10
     # unfreeze_layers(model, n_unfreeze)
     
-    
-    
 if __name__ == '__main__':
     main()

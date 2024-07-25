@@ -13,22 +13,6 @@ from glob import glob
 from transformers import Wav2Vec2Model
 from train_utils import evaluate_model
 
-def get_embeddings(model, data_loader):
-    model.eval()
-    embeddings = []
-    labels = []
-    
-    with torch.no_grad():
-        for batch in data_loader:
-            inputs, batch_labels = batch
-            _ = model(inputs)  # forward pass
-            batch_embeddings = model.get_penultimate_features()
-            
-            embeddings.append(batch_embeddings)
-            labels.extend(batch_labels)
-    
-    return torch.cat(embeddings), labels
-
 
 def set_seed(seed):
     random.seed(seed)
@@ -159,6 +143,8 @@ def prep_model(config, train_loader, is_sweep=False):
     
     if config.OPTIMIZER == "adam":
         optimizer = torch.optim.Adam(model.parameters(), weight_decay=config.weight_decay, lr=float(config.lr))
+        if config.MODEL == 'wav2vec_pretrained' or config.MODEL == 'wav2vec_finetuned':
+            optimizer = torch.optim.Adam(model.emotion_classifier.parameters(), lr=config.lr)
     elif config.OPTIMIZER == "SGD":
         optimizer = torch.optim.SGD(model.parameters(), lr=float(config.lr), momentum=0.9)
     else:
@@ -263,7 +249,7 @@ def get_model(config, train_loader):
         freeze_wav2vec(model)
 
         print_model_info(model)
-        optimizer = torch.optim.Adam(model.emotion_classifier.parameters(), lr=1e-3)
+        
         
     elif config.MODEL =='wav2vec_finetuned':
         
@@ -271,12 +257,13 @@ def get_model(config, train_loader):
         print('Finetuned model loaded from: ',config.path_pretrained )
         model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_loader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE,
         activation=config.ACTIVATION, use_wav2vec=True)
-        
-        for param in model.parameters():
-            param.requires_grad = False
-        
-        unfreeze_layers(model, config.n_unfreeze)
-        
+        freeze_wav2vec(model)
+        # for param in model.parameters():
+        #     param.requires_grad = False
+        try:
+            unfreeze_layers(model, config.n_unfreeze)
+        except:
+            print('unfreeze fail.')
         print_model_info(model)
     
     # elif config.MODEL == 'SVM_C':
