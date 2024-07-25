@@ -335,13 +335,13 @@ def prepare_dataloaders(data, labels, config, combine_indices=None, balance=Fals
     print(f"\nTrain/Val/Test set splitted with batch size {config.BATCH_SIZE}: {len(train_dataset)}/{len(val_dataset)}/{len(test_dataset)}\n")
     
     # print('Calculating label distributions...')
- 
-    # train_labels = [labels[idx] for idx in train_dataset.indices]
-    # val_labels = [labels[idx] for idx in val_dataset.indices]
-    # test_labels = [labels[idx] for idx in test_dataset.indices]
-    # print_label_distribution(train_labels, "Train")
-    # print_label_distribution(val_labels, "Validation")
-    # print_label_distribution(test_labels, "Test")
+    if config.VISUALIZE:
+        train_labels = [labels[idx] for idx in train_dataset.indices]
+        val_labels = [labels[idx] for idx in val_dataset.indices]
+        test_labels = [labels[idx] for idx in test_dataset.indices]
+        print_label_distribution(train_labels, "Train")
+        print_label_distribution(val_labels, "Validation")
+        print_label_distribution(test_labels, "Test")
     
     train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
     val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE, shuffle=False, collate_fn=collate_fn)

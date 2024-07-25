@@ -26,8 +26,10 @@ torch.cuda.empty_cache()
 
 def save_model(model, path):
     if hasattr(model, 'save_pretrained'):
+        print('hugging face type.')
         model.save_pretrained(path)
     else:
+        print('model will be saved as .pt')
         torch.save(model.state_dict(), os.path.join(path, 'model.pt'))
 
 def load_model(model, path):
@@ -166,13 +168,16 @@ def train(model, train_dataloader, val_dataloader, config):
         
         # 최고 성능 모델 저장
         if train_metrics[4] > best_val_f1:
+            print('New best model found.')
             best_val_f1 = train_metrics[4]
             try:
-                print('Model is saved.')
+                
+                print(config.self.MODEL_PRE_BASE_DIR)
                 save_model(model, config.self.MODEL_PRE_BASE_DIR)
+                print('Model is saved.')
                 #model.save_pretrained(config.path_best)
             except:
-                print('err.')
+                print('(Err) Model is not saved.')
     
     return model, history
 # class Wav2VecFeatureExtractor(torch.nn.Module):
@@ -258,10 +263,11 @@ config.MODEL= 'wav2vec_finetuned'
 config.DATA_NAME='MELD'
 config.WANDB_PROJECT=config.MODEL+'_'+config.DATA_NAME
 
-path_best = f"{os.path.join(config.MODEL_PRE_BASE_DIR, config.WANDB_PROJECT)+'_best'}"
-os.makedirs(path_best, exist_ok=True)
-print(path_best)
+# path_best = f"{os.path.join(config.MODEL_PRE_BASE_DIR, config.WANDB_PROJECT)+'_best'}"
+# os.makedirs(path_best, exist_ok=True)
+# print(path_best)
 config.update_path()
+print(config.MODEL_PRE_BASE_DIR)
 
 model = Wav2Vec2ForSequenceClassification.from_pretrained(config.path_pretrained, num_labels=n_labels, output_hidden_states=True)
 model.to(device)
