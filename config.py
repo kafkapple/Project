@@ -37,9 +37,8 @@ class Config:
     MODEL: str = "wav2vec_pretrained"#"wav2vec_v2" "classifer" "wav2vec_finetuned"
     model_name: str = ''
     
-    path_best="facebook/wav2vec2-base" # model pretrained
     # os.path.join('wav2vec_I_fine_tune_best')
-    path_pretrained=path_best
+    path_pretrained="facebook/wav2vec2-base" # model pretrained
     
     ACTIVATION: str = "relu"
     OPTIMIZER: str = "adam"

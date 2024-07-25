@@ -205,6 +205,7 @@ def train(model, train_dataloader, val_dataloader, config):
 
 ### 
 config=Config()
+
 config.N_STEP_FIG=1
 
 num_epochs = 60
