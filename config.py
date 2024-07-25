@@ -49,10 +49,11 @@ class Config:
     label_smoothing=0.1
     #momentum = 0.01
     
-    BOOL = True
+    BOOL_REGUL = False
     BOOL_MODEL_INIT=True
-    SCHEDULER: bool = BOOL
-    GRADIENT_CLIP: bool = BOOL
+    
+    SCHEDULER: bool = BOOL_REGUL
+    GRADIENT_CLIP: bool = BOOL_REGUL
     eta_min: float = 1e-4 /100
     
     MODEL_INIT: bool = BOOL_MODEL_INIT # no need for finetuning
@@ -138,9 +139,7 @@ class Config:
     
     CONFIG_DEFAULTS = {
     "resume":"allow",
-    "architecture": f"{MODEL}",
-    "dataset": f"{DATA_NAME}",
-    #"batch_size": BATCH_SIZE,
+    "dataset": DATA_NAME,
     "epochs": NUM_EPOCHS,
     "global_epoch": global_epoch,
     "batch_size": BATCH_SIZE,
@@ -148,7 +147,9 @@ class Config:
     "lr": lr,
     "dropout_rate": DROPOUT_RATE,
     "activation": ACTIVATION,
-    "optimizer": OPTIMIZER
+    "optimizer": OPTIMIZER,
+    "regularization_add": BOOL_REGUL,
+    "model_initialization": BOOL_MODEL_INIT
     }  
     def __post_init__(self):
         current_date = datetime.datetime.now()
