@@ -120,6 +120,8 @@ def train(model, train_dataloader, val_dataloader, config):
             unfreeze_layers(model, 6)  # 5번째 에폭 후 6개 레이어 동결 해제
         elif config.global_epoch == 10:
             unfreeze_layers(model, 9)  # 10번째 에폭 후 9개 레이어 동결 해제
+        elif config.global_epoch == 15:
+            unfreeze_layers(model, 15)  # 10번째 에폭 후 15개 레이어 동결 해제
         model.train()
         total_loss = 0
         all_preds = []
@@ -214,7 +216,7 @@ config=Config()
 
 config.N_STEP_FIG=1
 
-num_epochs = 60
+num_epochs = 50
 config.NUM_EPOCHS=num_epochs
 #lr=1e-4
 n_batch = 8 # 74% GPU. 8 is danger high n_batch -> small batch size -> low gpu?
