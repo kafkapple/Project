@@ -168,7 +168,8 @@ def train(model, train_dataloader, val_dataloader, config):
         if train_metrics[4] > best_val_f1:
             best_val_f1 = train_metrics[4]
             try:
-                save_model(model, config.path_best)
+                print('Model is saved.')
+                save_model(model, config.self.MODEL_PRE_BASE_DIR)
                 #model.save_pretrained(config.path_best)
             except:
                 print('err.')
@@ -216,7 +217,6 @@ config.BATCH_SIZE=n_batch
 n_labels = len(config.LABELS_EMO_MELD)
 
 #wav2vec_path = ".models/wav2vec2_finetuned"  # 파인튜닝된 wav2vec2 모델 경로
-wav2vec_path="facebook/wav2vec2-base"
 
 data_dir=os.path.join(config.DATA_DIR, 'MELD', 'train_audio')
 label_dir=os.path.join(config.DATA_DIR, 'MELD_train_sampled.csv')
@@ -263,7 +263,7 @@ os.makedirs(path_best, exist_ok=True)
 print(path_best)
 config.update_path()
 
-model = Wav2Vec2ForSequenceClassification.from_pretrained(wav2vec_path, num_labels=n_labels, output_hidden_states=True)
+model = Wav2Vec2ForSequenceClassification.from_pretrained(config.path_pretrained, num_labels=n_labels, output_hidden_states=True)
 model.to(device)
 for param in model.parameters():
     param.requires_grad = False
