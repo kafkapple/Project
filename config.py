@@ -18,11 +18,11 @@ from collections import namedtuple
 #
 class Config:
     mask_time_length =2
-    
+    n_unfreeze=10
     device=''
     
     # monitoring
-    N_STEP_FIG: int = 1
+    N_STEP_FIG: int = 2
     N_EMBEDDINGS: int = 500 # n of embeddings to show
 
     VISUALIZE = False # during training 
@@ -44,7 +44,7 @@ class Config:
     ACTIVATION: str = "relu"
     OPTIMIZER: str = "adam"
     # For regul
-    DROPOUT_RATE: float = 0.5#0.4
+    DROPOUT_RATE: float = 0.4
     early_stop_epoch: int = 100
     weight_decay: float = 0.1 # 1e-5 #0.01
     label_smoothing=0.1
