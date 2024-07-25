@@ -71,7 +71,8 @@ class Config:
     
     NUM_EPOCHS: int = 5
     BATCH_SIZE: int = 32
-    lr: float = 0.0005
+    lr: float = 0.0005 #1e-4 ~ 1e-3
+    weight_decay: float = 0.0005 #0.1 # 1e-5 ~ 1e-4
     # Model settings
     DATA_NAME= "MELD"#"RAVDESS"#_audio_speech"
     MODEL: str = "wav2vec_pretrained"#"wav2vec_v2" "classifer" "wav2vec_finetuned"
@@ -85,7 +86,7 @@ class Config:
     # For regul
     DROPOUT_RATE: float = 0.4
     early_stop_epoch: int = 100
-    #weight_decay: float = 0.1 # 1e-5 #0.01
+    
     label_smoothing=0.1
     momentum = 0.1
     

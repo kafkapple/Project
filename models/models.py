@@ -12,6 +12,10 @@ from glob import glob
 
 from transformers import Wav2Vec2Model
 from train_utils import evaluate_model
+from config import Config
+
+config = Config()
+
 
 
 def set_seed(seed):
@@ -143,8 +147,18 @@ def prep_model(config, train_loader, is_sweep=False):
     
     if config.OPTIMIZER == "adam":
         optimizer = torch.optim.Adam(model.parameters(),  lr=float(config.lr)) #weight_decay=config.weight_decay,
-        if config.MODEL == 'wav2vec_pretrained' or config.MODEL == 'wav2vec_finetuned':
+        if config.MODEL == 'wav2vec_pretrained' or config.MODEL == 'wav2vec_finetuning':
+            print('\nOptimizer setup for wav2vec...')
+            
+            optimizer_grouped_parameters = [
+            {'params': model.wav2vec2.parameters(), 'lr': config.lr/10, 'weight_decay':config.weight_decay/10},
+            {'params': model.emotion_classifier.parameters(), 'lr': config.lr, 'weight_decay':config.weight_decay}
+            ]
+            optimizer = torch.optim.AdamW(optimizer_grouped_parameters)
+        else:
             optimizer = torch.optim.Adam(model.emotion_classifier.parameters(), weight_decay=config.weight_decay, lr=config.lr)
+        
+        
     elif config.OPTIMIZER == "SGD":
         optimizer = torch.optim.SGD(model.parameters(), lr=float(config.lr), momentum=0.9)
     else:
@@ -358,7 +372,7 @@ class EmotionRecognitionWithWav2Vec(nn.Module):
 class EmotionRecognitionModel_v2(EmotionRecognitionBase):
     def __init__(self, input_size, num_classes, dropout_rate, activation):
         super().__init__(input_size, num_classes, dropout_rate, activation)
-        momentum = 0.1#config.momentum
+        momentum = config.momentum #0.1
         self.fc1 = nn.Linear(input_size, 256)
         self.bn1 = nn.BatchNorm1d(256, momentum=momentum)
         self.fc2 = nn.Linear(256, 128)
