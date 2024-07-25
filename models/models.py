@@ -245,11 +245,7 @@ def get_model(config, train_loader):
         
         model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_loader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE,
         activation=config.ACTIVATION, use_wav2vec=True)
-        
         freeze_wav2vec(model)
-
-        print_model_info(model)
-        
         
     elif config.MODEL =='wav2vec_finetuned':
         
@@ -264,13 +260,13 @@ def get_model(config, train_loader):
             unfreeze_layers(model, config.n_unfreeze)
         except:
             print('unfreeze fail.')
-        print_model_info(model)
     
     # elif config.MODEL == 'SVM_C':
     #     return SVMClassifier(train_loader.dataset[0][0].shape[1], num_classes=len(config.LABELS_EMOTION))
     else:
         raise ValueError(f"Unknown model type: {config.MODEL}")
     
+    print_model_info(model)
     return model#model_class(
   
 # ### Models
