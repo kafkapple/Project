@@ -12,8 +12,7 @@ from tqdm import tqdm
 import os
 
 import wandb
-
-from collections import OrderedDict
+from collections import OrderedDict, Counter
 
 from transformers.modeling_outputs import SequenceClassifierOutput
 import torch.nn.functional as F
@@ -22,7 +21,6 @@ import torch
 from data_utils import get_logits_from_output
 import torch
 import torch.nn.functional as F
-from collections import Counter
 
 def compute_layer_similarity(activations):
     layer_names = list(activations.keys())
@@ -226,7 +224,7 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
         print('No embedding.')   
          
     try:
-        fig_rsa = perform_rsa(model, data_loader, config.device, select_all_common=True)
+        fig_rsa = perform_rsa(model, data_loader, config.device, num_layers=10, select_all_common=False)
         save_and_log_figure(stage, fig_rsa, config, "Representation similarity", f"{stage.capitalize()}")
         
     except:

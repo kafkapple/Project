@@ -217,6 +217,38 @@ def prep_model(config, train_loader, is_sweep=False):
     model = model.to(device)
     return model, optimizer, criterion, device
 
+def print_model_info(model):
+    # 총 파라미터 수 계산
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    print("Model Structure:")
+    print(model)
+    print("\nLayer-wise details:")
+    
+    for name, module in model.named_modules():
+        if not list(module.children()):  # 자식 모듈이 없는 경우 (즉, 기본 레이어인 경우)
+            print(f"\nLayer: {name}")
+            print(f"Type: {type(module).__name__}")
+            params = sum(p.numel() for p in module.parameters())
+            print(f"Parameters: {params:,}")
+
+    print(f"\nTotal layers: {len(list(model.modules()))}")
+    print(f"Total parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
+def unfreeze_layers(model, num_layers):
+    for param in model.parameters():
+        param.requires_grad = False
+    try:
+        for i, layer in enumerate(reversed(list(model.wav2vec2.encoder.layers))):
+            if i < num_layers:
+                for param in layer.parameters():
+                    param.requires_grad = True
+            else:
+                break
+    except:
+        print('unfreeze err')
+        
 def get_model(config, train_loader):
     
     if config.MODEL == 'classifier_only':
@@ -229,12 +261,27 @@ def get_model(config, train_loader):
         
         model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_loader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE,
         activation=config.ACTIVATION, use_wav2vec=True)
+        
+        for param in model.parameters():
+            param.requires_grad = False
+        
+        unfreeze_layers(model, config.n_unfreeze)
+        
+        print_model_info(model)
+        
     elif config.MODEL =='wav2vec_finetuned':
         
         config.path_pretrained= os.path.join(config.MODEL_BASE_DIR,'finetuned', 'wav2vec_finetuned_best')
         print('Finetuned model loaded from: ',config.path_pretrained )
         model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_loader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE,
         activation=config.ACTIVATION, use_wav2vec=True)
+        
+        for param in model.parameters():
+            param.requires_grad = False
+        
+        unfreeze_layers(model, config.n_unfreeze)
+        
+        print_model_info(model)
     
     # elif config.MODEL == 'SVM_C':
     #     return SVMClassifier(train_loader.dataset[0][0].shape[1], num_classes=len(config.LABELS_EMOTION))
