@@ -151,7 +151,7 @@ def prep_model(config, train_loader, is_sweep=False):
             print('\nOptimizer setup for wav2vec...')
             
             optimizer_grouped_parameters = [
-            {'params': model.wav2vec2.parameters(), 'lr': config.lr/10, 'weight_decay':config.weight_decay/10},
+            {'params': model.wav2vec.parameters(), 'lr': config.lr/10, 'weight_decay':config.weight_decay/10},
             {'params': model.emotion_classifier.parameters(), 'lr': config.lr, 'weight_decay':config.weight_decay}
             ]
             optimizer = torch.optim.AdamW(optimizer_grouped_parameters)
