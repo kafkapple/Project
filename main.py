@@ -88,24 +88,15 @@ def main(args=None):
                 print("Something's wrong. Try again.")
                 continue
             break
-    
-    # Dataset
     # Best model info chk
     chk_best_model_info(config)
-    
-    config.CUR_MODE=args.mode
-    config.WANDB_PROJECT = args.mode+'_'+config.MODEL+'_'+config.DATA_NAME
-    
-    file_name, _ = os.path.splitext(os.path.basename(config.MODEL_SAVE_PATH))
-    file_name = file_name.replace('best_model_', '')
-    config.model_name=file_name
-    print('Model name: ',config.model_name)
-    
-    folder_path = os.path.dirname(config.MODEL_SAVE_PATH)
-    new_path=os.path.join(folder_path, config.model_name) # chk
-    config.MODEL_DIR=new_path
+    config.CUR_MODE=args.mode  
+    # file_name, _ = os.path.splitext(os.path.basename(config.MODEL_SAVE_PATH))
+    # file_name = file_name.replace('best_model_', '')
+    # config.model_name=file_name
+    print('Model name: ',config.MODEL)    
+    # folder_path = os.path.dirname(config.MODEL_SAVE_PATH)
     print('Model path New: ', config.MODEL_DIR)
-
     print('epoch: ',config.global_epoch)
         ### Dataset
     if args.mode =='prep_data':
@@ -189,13 +180,10 @@ def main(args=None):
             config.MODEL_SAVE_PATH=generate_unique_filename(config.MODEL_SAVE_PATH)
             config.CKPT_SAVE_PATH=generate_unique_filename(config.CKPT_SAVE_PATH)
             print(f'New model will be trained: {config.MODEL_SAVE_PATH}')
-            file_name, _ = os.path.splitext(os.path.basename(config.MODEL_SAVE_PATH))
+            # file_name, _ = os.path.splitext(os.path.basename(config.MODEL_SAVE_PATH))
             
-            file_name = file_name.replace('best_model_', '')
-            
-            os.makedirs(new_path, exist_ok=True)
-            os.makedirs(os.path.join(new_path, 'results'), exist_ok=True)
-            print(new_path) 
+            # file_name = file_name.replace('best_model_', '')
+
         config.NUM_EPOCHS = int(input("Number of epoch for training: "))
         
         model, optimizer, criterion, device = prep_model(config, train_loader, is_sweep=False)
