@@ -251,16 +251,17 @@ def get_model(config, train_loader):
         print_model_info(model)
         
         
-    elif config.MODEL =='wav2vec_finetuned':
+    elif config.MODEL =='wav2vec_finetuning':
         
-        config.path_pretrained= os.path.join(config.MODEL_BASE_DIR,'finetuned', 'wav2vec_finetuned_best')
-        print('Finetuned model loaded from: ',config.path_pretrained )
+        #config.path_pretrained= os.path.join(config.MODEL_BASE_DIR,'finetuning', 'wav2vec_finetuning_best')
+        print('Finetuned model loaded from: ',config.path_pretrained ) # from wav2vec original
         model= EmotionRecognitionWithWav2Vec(num_classes=len(config.LABELS_EMOTION), config=config,  input_size=train_loader.dataset[0][0].shape[1], dropout_rate=config.DROPOUT_RATE,
         activation=config.ACTIVATION, use_wav2vec=True)
         freeze_wav2vec(model)
         # for param in model.parameters():
         #     param.requires_grad = False
         try:
+            print(f'trying to unfreeze {config.n_unfreeze} layers')
             unfreeze_layers(model, config.n_unfreeze)
         except:
             print('unfreeze fail.')

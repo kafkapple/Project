@@ -1,4 +1,4 @@
-from .models import list_models, chk_best_model_info, find_best_model, prep_model, get_model, EmotionRecognitionModel_v2, EmotionRecognitionWithWav2Vec #SVMClassifier, 
+from .models import list_models, unfreeze_layers, print_model_info, chk_best_model_info, find_best_model, prep_model, get_model, EmotionRecognitionModel_v2, EmotionRecognitionWithWav2Vec #SVMClassifier, 
 
 #EmotionRecognitionModel_v1, 
 # def get_model(config, train_loader):

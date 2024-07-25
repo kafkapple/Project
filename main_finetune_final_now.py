@@ -24,26 +24,6 @@ from models import get_model, print_model_info, unfreeze_layers, EmotionRecognit
 gc.collect()
 torch.cuda.empty_cache()
 
-def print_model_info(model):
-    # 총 파라미터 수 계산
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-    print("Model Structure:")
-    print(model)
-    print("\nLayer-wise details:")
-    
-    for name, module in model.named_modules():
-        if not list(module.children()):  # 자식 모듈이 없는 경우 (즉, 기본 레이어인 경우)
-            print(f"\nLayer: {name}")
-            print(f"Type: {type(module).__name__}")
-            params = sum(p.numel() for p in module.parameters())
-            print(f"Parameters: {params:,}")
-
-    print(f"\nTotal layers: {len(list(model.modules()))}")
-    print(f"Total parameters: {total_params:,}")
-    print(f"Trainable parameters: {trainable_params:,}")
-    
 def save_model(model, path):
     if hasattr(model, 'save_pretrained'):
         model.save_pretrained(path)
@@ -198,15 +178,15 @@ def train(model, train_dataloader, val_dataloader, config):
                 print('err.')
     
     return model, history
-class Wav2VecFeatureExtractor(torch.nn.Module):
-    def __init__(self, model_name="facebook/wav2vec2-base"):
-        super().__init__()
-        self.model = Wav2Vec2Model.from_pretrained(model_name)
+# class Wav2VecFeatureExtractor(torch.nn.Module):
+#     def __init__(self, model_name="facebook/wav2vec2-base"):
+#         super().__init__()
+#         self.model = Wav2Vec2Model.from_pretrained(model_name)
         
-    def forward(self, input_values):
-        outputs = self.model(input_values, output_hidden_states=True)
-        # penultimate layer (-2)의 hidden state를 반환
-        return outputs.hidden_states[-2]
+#     def forward(self, input_values):
+#         outputs = self.model(input_values, output_hidden_states=True)
+#         # penultimate layer (-2)의 hidden state를 반환
+#         return outputs.hidden_states[-2]
 # class Wav2Vec2ClassifierModel(nn.Module):
 #     def __init__(self, config, num_labels, dropout=0.4):
 #         super().__init__()
@@ -234,7 +214,7 @@ config.N_STEP_FIG=1
 num_epochs = 60
 config.NUM_EPOCHS=num_epochs
 #lr=1e-4
-n_batch = 4 # 74% GPU. 8 is danger high n_batch -> small batch size -> low gpu?
+n_batch = 32 # 74% GPU. 8 is danger high n_batch -> small batch size -> low gpu?
 config.BATCH_SIZE=n_batch
 n_labels = len(config.LABELS_EMO_MELD)
 

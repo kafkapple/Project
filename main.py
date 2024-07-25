@@ -145,14 +145,14 @@ def main(args=None):
             config.DATA_NAME = 'MELD_toy'
         else:
             print('ERR')
-        select_model = int(input('Select Model type.\n1. Classifier only\n2. Pretrained model \n3. Finetuned model\n'))
+        select_model = int(input('Select Model type.\n1. Classifier only\n2. Pretrained model \n3. Finetuning model (end-to-end)\n'))
         if select_model ==1:
             config.MODEL ="classifier_only"#"wav2vec_v2"  "wav2vec_finetuned"
             config.BOOL_MODEL_INIT =True
         elif select_model == 2:
             config.MODEL="wav2vec_pretrained"#"wav2vec_v2" "classifer" "wav2vec_finetuned"
         elif select_model == 3:
-            config.MODEL = "wav2vec_finetuned"
+            config.MODEL = "wav2vec_finetuning"
         else:
             print('ERR')
             
