@@ -170,7 +170,7 @@ def train(model, train_dataloader, val_dataloader, config):
         if train_metrics[4] > best_val_f1:
             
             best_val_f1 = train_metrics[4]
-            print(f'New best model found. Best val F1: {best_val_f1.4f}')
+            print(f'New best model found. Best val F1: {best_val_f1:.4f}')
             try:
                 print(config.MODEL_PRE_BASE_DIR)
                 save_model(model, config.MODEL_PRE_BASE_DIR)
