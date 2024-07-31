@@ -21,7 +21,6 @@ import torch
 from data_utils import get_logits_from_output
 import torch
 import torch.nn.functional as F
-from train_utils import process_batch
 
 
 def get_embeddings(model, data_loader):
@@ -179,13 +178,37 @@ def visualize_results(config, model, data_loader, device, log_data, stage):
 
     with torch.no_grad():
         for batch in tqdm(data_loader, desc="Preparing data for Visualizing..."):
-            _, preds, labels, penultimate_features = process_batch(model, batch, None, device)
+            if isinstance(batch, dict):
+                inputs = batch['audio'].to(device)
+                labels = batch['label'].to(device)
+            else:  # batch가 튜플인 경우
+                inputs, labels = batch
+                inputs = inputs.to(device)
+                labels = labels.to(device)  # labels도 device로 이동
+            outputs = model(inputs)
             
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
-            all_embeddings.extend(penultimate_features.cpu().numpy())
             #activations = get_all_layer_activations(model, inputs)
+            try:
+                logits = get_logits_from_output(outputs)
+            except Exception as e:
+                print(f'Error in get_logits_from_output during evaluation: {e}')
+                logits = outputs  #
             
+            if logits is None:
+                raise ValueError("Unable to extract logits from model output")
+            
+            # Penultimate features 추출 (가능한 경우)
+                       
+            if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
+                penultimate_features = outputs.hidden_states[-2]
+            elif hasattr(model, 'get_penultimate_features'):
+                penultimate_features = model.get_penultimate_features()
+            else:
+                print("Warning: Hidden states not available. Using logits as embeddings.")
+                penultimate_features = logits
+            
+
+            _, preds = torch.max(logits, 1) 
             
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())

@@ -6,42 +6,7 @@ import os
 from collections import namedtuple
 from visualization import visualize_results
 from data_utils import get_logits_from_output
-def process_batch(model, batch, criterion, device, is_training=False):
-    inputs = batch['audio'].to(device)
-    labels = batch['label'].to(device)
-    
-    outputs, penultimate_features = model(inputs)
-    try:
-        logits = get_logits_from_output(outputs)
-    except Exception as e:
-        print(f'Error in get_logits_from_output: {e}')
-        logits = outputs  # 오류 발생 시 원래 출력을 사용
-    if logits is None:
-        raise ValueError("Unable to extract logits from model output")
 
-            # Penultimate features 추출 (가능한 경우)
-                       
-    if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
-        penultimate_features = outputs.hidden_states[-2]
-    elif hasattr(model, 'get_penultimate_features'):
-        penultimate_features = model.get_penultimate_features()
-    else:
-        print("Warning: Hidden states not available. Using logits as embeddings.")
-        penultimate_features = logits
-    
-    loss = criterion(logits, labels)
-    _, preds = torch.max(logits, 1) 
-    
-    return loss, preds, labels, penultimate_features
-
-            
-def compute_metrics(all_preds, all_labels):
-    return {
-        'accuracy': accuracy_score(all_labels, all_preds),
-        'precision': precision_score(all_labels, all_preds, average='weighted'),
-        'recall': recall_score(all_labels, all_preds, average='weighted'),
-        'f1': f1_score(all_labels, all_preds, average='weighted')
-    }
 
 def evaluate_baseline(model, X_test, y_test, config):
     y_pred = model.predict(X_test)
@@ -186,9 +151,6 @@ def train_model(model, train_loader, val_loader, config, device, optimizer, crit
             break
     
     return history, best_val_loss, best_val_acc
-
-
-
 def train_epoch(config, model, dataloader, criterion, optimizer, device):
     model.train()
     running_loss = 0.0
@@ -197,23 +159,53 @@ def train_epoch(config, model, dataloader, criterion, optimizer, device):
     
     progress_bar = tqdm(dataloader, desc="Training")
     for batch in progress_bar:
+        features = batch['audio'].to(device)
+        batch_labels = batch['label'].to(device)
+        if config.VISUALIZE:
+            print(f"Features shape: {features.shape}")
+            print(f"Labels shape: {batch_labels.shape}")
+            for name, module in model.named_modules():
+                if isinstance(module, torch.nn.BatchNorm1d):
+                    print(f"{name} - mean: {module.running_mean.mean().item():.4f}, var: {module.running_var.mean().item():.4f}")
         
         optimizer.zero_grad()
-        loss, preds, labels, _ = process_batch(model, batch, criterion, device, is_training=True)
-        
+        outputs = model(features)
+        try:
+            logits = get_logits_from_output(outputs)
+        except Exception as e:
+            print(f'Error in get_logits_from_output during training: {e}')
+            logits = outputs  # 오류 발생 시 원래 출력을 사용
+  
+        loss = criterion(logits, batch_labels)
         loss.backward()
         
+        if config.GRADIENT_CLIP:
+            if config.VISUALIZE:
+                print('\nGradient Clipping')
+            #gradient clipping
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
         optimizer.step()
 
         running_loss += loss.item()
-        all_preds.extend(preds.cpu().numpy())
-        all_labels.extend(labels.cpu().numpy())
-                
+        _, predicted = torch.max(logits, 1)
+        all_preds.extend(predicted.cpu().numpy())
+        all_labels.extend(batch_labels.cpu().numpy())
+        
+        progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
+    metric_average=config.METRIC_AVG
     epoch_loss = running_loss / len(dataloader)
-    metrics = compute_metrics(all_preds, all_labels)
-   
+    accuracy = accuracy_score(all_labels, all_preds)
+    precision = precision_score(all_labels, all_preds, average=metric_average)
+    recall = recall_score(all_labels, all_preds, average=metric_average)
+    f1 = f1_score(all_labels, all_preds, average=metric_average)
     
-    return epoch_loss, metrics
+    ### for debugging - gradient chk
+    if config.VISUALIZE:
+        for name, param in model.named_parameters():
+            if param.grad is not None:
+                print(f"{name}: grad_norm: {param.grad.norm().item()}")
+    
+    return epoch_loss, accuracy, precision, recall, f1
 
 def evaluate_model(config, model, dataloader, criterion, device):
     model.eval()
@@ -224,18 +216,35 @@ def evaluate_model(config, model, dataloader, criterion, device):
     EvaluationResult = config.EvaluationResult
     
     with torch.no_grad():
-        for batch in tqdm(dataloader, desc="Evaluating"):
-            loss, preds, labels, _ = process_batch(model, batch, criterion, device)
+        for batch in dataloader:
+            features = batch['audio'].to(device)
+            batch_labels = batch['label'].to(device)
+            if config.VISUALIZE:
+                print(f"Features shape: {features.shape}")
+                print(f"Labels shape: {batch_labels.shape}")
+        # for features, batch_labels in tqdm(dataloader, desc="Evaluating"):
+            outputs= model(features)
+            try:
+                logits = get_logits_from_output(outputs)
+            except Exception as e:
+                print(f'Error in get_logits_from_output during evaluation: {e}')
+                logits = outputs  # 오류 발생 시 원래 출력을 사용
             
+            loss = criterion(logits, batch_labels)
             running_loss += loss.item()
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
-    eval_loss = running_loss / len(dataloader)
-    metrics = compute_metrics(all_preds, all_labels)
+            _, predicted = torch.max(logits, 1)
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(batch_labels.cpu().numpy())
     
-    return EvaluationResult(eval_loss, metrics['accuracy'], metrics['precision'],
-                            metrics['recall'], metrics['f1'], all_labels, all_preds)
+    epoch_loss = running_loss / len(dataloader)
+    accuracy = accuracy_score(all_labels, all_preds)
+    precision = precision_score(all_labels, all_preds, average=config.METRIC_AVG, zero_division=0)
+    recall = recall_score(all_labels, all_preds, average=config.METRIC_AVG)
+    f1 = f1_score(all_labels, all_preds, average=config.METRIC_AVG)
+    
+    return EvaluationResult(epoch_loss, accuracy, precision, recall, f1, all_labels, all_preds)
 
+#epoch_loss, accuracy, precision, recall, f1, all_labels, all_preds
 
 def log_metrics(stage, stage_metrics, epoch):
     metrics = ['loss', 'accuracy', 'precision', 'recall', 'f1']
